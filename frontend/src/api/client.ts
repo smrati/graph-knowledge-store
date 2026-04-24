@@ -47,6 +47,39 @@ export interface SearchResponse {
   query: string;
 }
 
+export interface GraphNode {
+  id: string;
+  label: string;
+  name?: string;
+  title?: string;
+  type?: string;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  type: string;
+}
+
+export interface SubgraphResponse {
+  article_id: string;
+  subgraph: { nodes: GraphNode[]; edges: GraphEdge[] };
+}
+
+export interface GraphNeighbor {
+  id: string;
+  title: string;
+  shared_nodes: number;
+  connection_type: string;
+}
+
+export interface GraphStats {
+  articles: number;
+  topics: number;
+  keywords: number;
+  entities: number;
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: { "Content-Type": "application/json" },
@@ -80,4 +113,15 @@ export const api = {
 
   search: (q: string, limit = 10, mode = "semantic") =>
     request<SearchResponse>(`/search?q=${encodeURIComponent(q)}&limit=${limit}&mode=${mode}`),
+
+  getFullGraph: () =>
+    request<{ nodes: GraphNode[]; edges: GraphEdge[] }>("/graph/full"),
+
+  getSubgraph: (articleId: string, depth = 2) =>
+    request<SubgraphResponse>(`/graph/article/${articleId}/subgraph?depth=${depth}`),
+
+  getNeighbors: (articleId: string, limit = 10) =>
+    request<{ article_id: string; neighbors: GraphNeighbor[] }>(`/graph/article/${articleId}/neighbors?limit=${limit}`),
+
+  getGraphStats: () => request<GraphStats>("/graph/stats"),
 };

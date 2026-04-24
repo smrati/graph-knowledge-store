@@ -110,15 +110,15 @@ def get_article_neighbors(article_id: uuid.UUID, limit: int = 10) -> list[dict]:
 
 
 def get_article_subgraph(article_id: uuid.UUID, depth: int = 2) -> dict:
+    depth = max(1, min(depth, 3))
     with get_session() as session:
         result = session.run(
-            """
-            MATCH path = (a:Article {id: $id})-[:HAS_TOPIC|HAS_KEYWORD|MENTIONS_ENTITY*1..2]-(connected)
+            f"""
+            MATCH path = (a:Article {{id: $id}})-[:HAS_TOPIC|HAS_KEYWORD|MENTIONS_ENTITY*1..{depth}]-(connected)
             RETURN nodes(path) AS nodes, relationships(path) AS rels
             LIMIT 50
             """,
             id=str(article_id),
-            depth=depth,
         )
         nodes_set = {}
         edges = []
@@ -136,6 +136,49 @@ def get_article_subgraph(article_id: uuid.UUID, depth: int = 2) -> dict:
                 start_id = str(rel.start_node["id"]) if "id" in dict(rel.start_node) else str(rel.start_node.get("name", ""))
                 end_id = str(rel.end_node["id"]) if "id" in dict(rel.end_node) else str(rel.end_node.get("name", ""))
                 edges.append({"source": start_id, "target": end_id, "type": rel.type})
+
+        return {"nodes": list(nodes_set.values()), "edges": edges}
+
+
+def get_full_graph() -> dict:
+    with get_session() as session:
+        result = session.run(
+            """
+            MATCH (n)
+            OPTIONAL MATCH (n)-[r]->(m)
+            RETURN n, r, m
+            """
+        )
+        nodes_set: dict[str, dict] = {}
+        edges: list[dict] = []
+        for record in result:
+            node = record["n"]
+            node_labels = list(node.labels)
+            label = node_labels[0] if node_labels else "Unknown"
+            props = dict(node)
+            node_id = str(props.pop("id", ""))
+            if not node_id:
+                node_id = str(props.get("name", ""))
+            if node_id and node_id not in nodes_set:
+                nodes_set[node_id] = {"id": node_id, "label": label, **props}
+
+            rel = record["r"]
+            if rel:
+                start_id = str(rel.start_node["id"]) if "id" in dict(rel.start_node) else str(rel.start_node.get("name", ""))
+                end_id = str(rel.end_node["id"]) if "id" in dict(rel.end_node) else str(rel.end_node.get("name", ""))
+                if start_id and end_id:
+                    edges.append({"source": start_id, "target": end_id, "type": rel.type})
+
+                end_node = record["m"]
+                if end_node:
+                    end_labels = list(end_node.labels)
+                    end_label = end_labels[0] if end_labels else "Unknown"
+                    end_props = dict(end_node)
+                    end_id_val = str(end_props.pop("id", ""))
+                    if not end_id_val:
+                        end_id_val = str(end_props.get("name", ""))
+                    if end_id_val and end_id_val not in nodes_set:
+                        nodes_set[end_id_val] = {"id": end_id_val, "label": end_label, **end_props}
 
         return {"nodes": list(nodes_set.values()), "edges": edges}
 
