@@ -2,7 +2,7 @@ import { useState } from "react";
 import MDEditor from "@uiw/react-md-editor";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
-import { Sparkles } from "lucide-react";
+import { Sparkles, FunctionSquare } from "lucide-react";
 
 export default function ArticleEditor() {
   const { id } = useParams();
@@ -11,6 +11,7 @@ export default function ArticleEditor() {
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [fixEquations, setFixEquations] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
@@ -29,10 +30,10 @@ export default function ArticleEditor() {
     setLoading(true);
     try {
       if (isEditing) {
-        await api.updateArticle(id!, { title, content });
+        await api.updateArticle(id!, { title, content, fix_equations: fixEquations || undefined });
         navigate(`/article/${id}`);
       } else {
-        const article = await api.createArticle({ content });
+        const article = await api.createArticle({ content, fix_equations: fixEquations || undefined });
         navigate(`/article/${article.id}`);
       }
     } catch (err) {
@@ -75,6 +76,23 @@ export default function ArticleEditor() {
           Title will be auto-generated from your content
         </div>
       )}
+      <div className="flex items-center gap-2 mb-3">
+        <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={fixEquations}
+            onChange={(e) => setFixEquations(e.target.checked)}
+            className="accent-indigo-600 w-4 h-4"
+          />
+          <FunctionSquare size={16} className="text-gray-500" />
+          <span className="text-gray-700">
+            Fix equations with LLM
+          </span>
+          <span className="text-xs text-gray-400">
+            (uses an extra LLM call to normalize LaTeX delimiters)
+          </span>
+        </label>
+      </div>
       <MDEditor value={content} onChange={(v) => setContent(v || "")} height={500} />
     </div>
   );

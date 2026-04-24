@@ -59,10 +59,10 @@ export const api = {
 
   getArticle: (id: string) => request<Article>(`/articles/${id}`),
 
-  createArticle: (data: { title?: string; content: string }) =>
+  createArticle: (data: { title?: string; content: string; fix_equations?: boolean }) =>
     request<Article>("/articles", { method: "POST", body: JSON.stringify(data) }),
 
-  updateArticle: (id: string, data: { title?: string; content?: string }) =>
+  updateArticle: (id: string, data: { title?: string; content?: string; fix_equations?: boolean }) =>
     request<Article>(`/articles/${id}`, { method: "PUT", body: JSON.stringify(data) }),
 
   deleteArticle: (id: string) =>

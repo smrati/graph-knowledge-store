@@ -7,11 +7,13 @@ from pydantic import BaseModel, Field
 class ArticleCreate(BaseModel):
     title: str | None = Field(None, max_length=500)
     content: str
+    fix_equations: bool = False
 
 
 class ArticleUpdate(BaseModel):
     title: str | None = Field(None, max_length=500)
     content: str | None = None
+    fix_equations: bool = False
 
 
 class ArticleResponse(BaseModel):

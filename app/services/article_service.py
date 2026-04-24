@@ -21,13 +21,18 @@ _executor = ThreadPoolExecutor(max_workers=4)
 async def create_article(
     session: AsyncSession, data: ArticleCreate, background_tasks: BackgroundTasks
 ) -> Article:
+    loop = get_running_loop()
+    from app.services.llm_service import generate_title, normalize_markdown_equations
+
     title = data.title
     if not title or not title.strip():
-        loop = get_running_loop()
-        from app.services.llm_service import generate_title
         title = await loop.run_in_executor(_executor, generate_title, data.content)
 
-    article = Article(title=title, content=data.content)
+    content = data.content
+    if data.fix_equations:
+        content = await loop.run_in_executor(_executor, normalize_markdown_equations, content)
+
+    article = Article(title=title, content=content)
     session.add(article)
     await session.commit()
     await session.refresh(article)
@@ -75,7 +80,12 @@ async def update_article(
     if data.title is not None:
         article.title = data.title
     if data.content is not None:
-        article.content = data.content
+        content = data.content
+        if data.fix_equations:
+            loop = get_running_loop()
+            from app.services.llm_service import normalize_markdown_equations
+            content = await loop.run_in_executor(_executor, normalize_markdown_equations, content)
+        article.content = content
         re_enrich = True
 
     await session.commit()

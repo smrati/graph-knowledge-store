@@ -43,6 +43,37 @@ def generate_title(content: str) -> str:
     return title
 
 
+def normalize_markdown_equations(content: str) -> str:
+    client = get_client()
+    response = client.chat.completions.create(
+        model=settings.llm_chat_model,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You are a markdown/LaTeX formatting fixer. Your ONLY job is to fix math equation delimiters.\n"
+                    "Rules:\n"
+                    "1. Wrap standalone/display equations in $$...$$\n"
+                    "2. Wrap inline equations in $...$\n"
+                    "3. Convert [equation] or multi-line [ \\n equation \\n ] blocks to $$equation$$\n"
+                    "4. Convert \\[...\\] to $$...$$ and \\(...\\) to $...$\n"
+                    "5. Leave ALL other text completely unchanged — headings, lists, tables, prose, code blocks\n"
+                    "6. Do NOT add, remove, or rewrite any content\n"
+                    "7. Do NOT translate or paraphrase anything\n"
+                    "8. Return the FULL markdown text with only equation delimiters fixed\n"
+                    "9. Preserve all blank lines and paragraph spacing"
+                ),
+            },
+            {"role": "user", "content": content},
+        ],
+        temperature=0.0,
+    )
+    normalized = response.choices[0].message.content
+    if not normalized or len(normalized) < len(content) * 0.5:
+        return content
+    return normalized
+
+
 def embed(texts: list[str]) -> list[list[float]]:
     client = get_client()
     response = client.embeddings.create(
