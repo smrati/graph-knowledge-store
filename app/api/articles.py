@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_session
 from app.schemas.article import (
     ArticleCreate,
+    ArticleIndexResponse,
     ArticleListResponse,
     ArticleResponse,
     ArticleUpdate,
@@ -30,6 +31,11 @@ async def list_articles(
     session: AsyncSession = Depends(get_session),
 ):
     return await article_service.list_articles(session, page, limit)
+
+
+@router.get("/index", response_model=ArticleIndexResponse)
+async def articles_index(session: AsyncSession = Depends(get_session)):
+    return await article_service.get_articles_index(session)
 
 
 @router.get("/{article_id}", response_model=ArticleResponse)

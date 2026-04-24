@@ -50,6 +50,19 @@ class ArticleListResponse(BaseModel):
     limit: int
 
 
+class ArticleIndexItem(BaseModel):
+    id: uuid.UUID
+    title: str
+    summary: str | None = None
+    keywords: list = Field(default_factory=list)
+
+    model_config = {"from_attributes": True}
+
+
+class ArticleIndexResponse(BaseModel):
+    articles: list[ArticleIndexItem]
+
+
 class SearchResult(BaseModel):
     article: ArticleListItem
     score: float

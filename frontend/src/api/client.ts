@@ -30,6 +30,13 @@ export interface ArticleListResponse {
   limit: number;
 }
 
+export interface ArticleIndexItem {
+  id: string;
+  title: string;
+  summary: string | null;
+  keywords: string[];
+}
+
 export interface SearchResult {
   article: ArticleListItem;
   score: number;
@@ -56,6 +63,9 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 export const api = {
   listArticles: (page = 1, limit = 20) =>
     request<ArticleListResponse>(`/articles?page=${page}&limit=${limit}`),
+
+  getArticlesIndex: () =>
+    request<{ articles: ArticleIndexItem[] }>("/articles/index"),
 
   getArticle: (id: string) => request<Article>(`/articles/${id}`),
 

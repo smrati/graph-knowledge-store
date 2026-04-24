@@ -9,7 +9,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.article import Article
-from app.schemas.article import ArticleCreate, ArticleListResponse, ArticleListItem, ArticleUpdate
+from app.schemas.article import ArticleCreate, ArticleIndexResponse, ArticleListResponse, ArticleListItem, ArticleUpdate
 from app.services.embedding_service import generate_and_store_embeddings
 from app.services.extraction_service import extract_metadata
 
@@ -64,6 +64,21 @@ async def list_articles(
         page=page,
         limit=limit,
     )
+
+
+async def get_articles_index(session: AsyncSession) -> ArticleIndexResponse:
+    from app.schemas.article import ArticleIndexItem
+
+    result = await session.execute(
+        select(Article.id, Article.title, Article.summary, Article.keywords)
+        .order_by(Article.updated_at.desc())
+    )
+    rows = result.all()
+    articles = [
+        ArticleIndexItem(id=r[0], title=r[1], summary=r[2], keywords=r[3] or [])
+        for r in rows
+    ]
+    return ArticleIndexResponse(articles=articles)
 
 
 async def update_article(
