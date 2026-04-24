@@ -2,7 +2,22 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Fuse from "fuse.js";
 import { api, type ArticleIndexItem, type SearchResult } from "../api/client";
-import { Search, Zap } from "lucide-react";
+import Typography from "@mui/material/Typography";
+import TextField from "@mui/material/TextField";
+import InputAdornment from "@mui/material/InputAdornment";
+import Button from "@mui/material/Button";
+import Card from "@mui/material/Card";
+import CardContent from "@mui/material/CardContent";
+import CardActionArea from "@mui/material/CardActionArea";
+import Chip from "@mui/material/Chip";
+import Box from "@mui/material/Box";
+import Radio from "@mui/material/Radio";
+import RadioGroup from "@mui/material/RadioGroup";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import CircularProgress from "@mui/material/CircularProgress";
+
+import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
+import BoltOutlinedIcon from "@mui/icons-material/BoltOutlined";
 
 export default function SearchPage() {
   const [query, setQuery] = useState("");
@@ -18,17 +33,18 @@ export default function SearchPage() {
 
   useEffect(() => {
     api.getArticlesIndex().then((data) => {
-      const fuseIndex = new Fuse(data.articles, {
-        keys: [
-          { name: "title", weight: 0.6 },
-          { name: "summary", weight: 0.25 },
-          { name: "keywords", weight: 0.15 },
-        ],
-        threshold: 0.4,
-        includeScore: true,
-        minMatchCharLength: 2,
-      });
-      setFuse(fuseIndex);
+      setFuse(
+        new Fuse(data.articles, {
+          keys: [
+            { name: "title", weight: 0.6 },
+            { name: "summary", weight: 0.25 },
+            { name: "keywords", weight: 0.15 },
+          ],
+          threshold: 0.4,
+          includeScore: true,
+          minMatchCharLength: 2,
+        })
+      );
       setIndexLoading(false);
     });
   }, []);
@@ -37,17 +53,13 @@ export default function SearchPage() {
     setQuery(value);
     setSearched(false);
     setSemanticResults([]);
-
     if (debounceRef.current) clearTimeout(debounceRef.current);
-
     if (!fuse || value.trim().length < 2) {
       setSuggestions([]);
       return;
     }
-
     debounceRef.current = setTimeout(() => {
-      const results = fuse.search(value.trim(), { limit: 8 });
-      setSuggestions(results.map((r) => r.item));
+      setSuggestions(fuse.search(value.trim(), { limit: 8 }).map((r) => r.item));
     }, 150);
   }
 
@@ -69,132 +81,133 @@ export default function SearchPage() {
   }
 
   return (
-    <div className="max-w-3xl">
-      <h2 className="text-xl font-bold text-gray-900 mb-4">Search</h2>
+    <Box sx={{ maxWidth: 720 }}>
+      <Typography variant="h5" sx={{ fontWeight: 600, mb: 3 }}>Search</Typography>
 
-      <form onSubmit={handleSearch} className="mb-6">
-        <div className="flex gap-2 mb-2">
-          <input
-            type="text"
+      <Box component="form" onSubmit={handleSearch} sx={{ mb: 3 }}>
+        <Box sx={{ display: "flex", gap: 1, mb: 1.5 }}>
+          <TextField
+            fullWidth
+            size="small"
             value={query}
             onChange={(e) => handleInputChange(e.target.value)}
             placeholder="Search articles..."
-            className="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
             autoFocus
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchOutlinedIcon fontSize="small" />
+                  </InputAdornment>
+                ),
+              },
+            }}
           />
-          <button
-            type="submit"
-            disabled={searching || !query.trim()}
-            className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
+          <Button type="submit" variant="contained" disabled={searching || !query.trim()}>
             {searching ? "Searching..." : "Search"}
-          </button>
-        </div>
-        <div className="flex gap-3">
-          <label className="flex items-center gap-1.5 text-sm">
-            <input
-              type="radio"
-              name="mode"
-              checked={mode === "semantic"}
-              onChange={() => setMode("semantic")}
-              className="accent-indigo-600"
-            />
-            Semantic
-          </label>
-          <label className="flex items-center gap-1.5 text-sm">
-            <input
-              type="radio"
-              name="mode"
-              checked={mode === "hybrid"}
-              onChange={() => setMode("hybrid")}
-              className="accent-indigo-600"
-            />
-            Hybrid (semantic + graph)
-          </label>
-        </div>
-      </form>
+          </Button>
+        </Box>
+        <RadioGroup
+          row
+          value={mode}
+          onChange={(e) => setMode(e.target.value as "semantic" | "hybrid")}
+        >
+          <FormControlLabel value="semantic" control={<Radio size="small" />} label="Semantic" />
+          <FormControlLabel value="hybrid" control={<Radio size="small" />} label="Hybrid (semantic + graph)" />
+        </RadioGroup>
+      </Box>
 
       {indexLoading && (
-        <p className="text-sm text-gray-400 mb-4">Loading search index...</p>
+        <Typography variant="body2" color="text.disabled" sx={{ mb: 2 }}>
+          Loading search index...
+        </Typography>
       )}
 
       {suggestions.length > 0 && !searched && (
-        <div className="mb-6">
-          <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-2">
-            <Zap size={12} />
-            QUICK MATCHES
-          </div>
-          <div className="grid gap-2">
+        <Box sx={{ mb: 3 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 1 }}>
+            <BoltOutlinedIcon sx={{ fontSize: 14 }} color="warning" />
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+              QUICK MATCHES
+            </Typography>
+          </Box>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
             {suggestions.map((s) => (
-              <div
-                key={s.id}
-                onClick={() => navigate(`/article/${s.id}`)}
-                className="border border-gray-200 rounded-lg p-3 bg-white hover:shadow-md transition-shadow cursor-pointer"
-              >
-                <h3 className="font-medium text-gray-900 text-sm">{s.title}</h3>
-                {s.summary && (
-                  <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{s.summary}</p>
-                )}
-                {s.keywords.length > 0 && (
-                  <div className="flex gap-1 mt-1.5 flex-wrap">
-                    {s.keywords.slice(0, 4).map((k) => (
-                      <span key={k} className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">
-                        {k}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <Card key={s.id} variant="outlined">
+                <CardActionArea onClick={() => navigate(`/article/${s.id}`)} sx={{ p: 1.5 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>{s.title}</Typography>
+                  {s.summary && (
+                    <Typography variant="caption" color="text.secondary" sx={{
+                      display: "-webkit-box", WebkitLineClamp: 1, WebkitBoxOrient: "vertical", overflow: "hidden",
+                    }}>
+                      {s.summary}
+                    </Typography>
+                  )}
+                  {s.keywords.length > 0 && (
+                    <Box sx={{ display: "flex", gap: 0.5, mt: 0.5, flexWrap: "wrap" }}>
+                      {s.keywords.slice(0, 4).map((k) => (
+                        <Chip key={k} label={k} size="small" variant="outlined" sx={{ fontSize: "0.65rem" }} />
+                      ))}
+                    </Box>
+                  )}
+                </CardActionArea>
+              </Card>
             ))}
-          </div>
-        </div>
-      )}
-
-      {searched && semanticResults.length === 0 && !searching && (
-        <p className="text-gray-500">No semantic results found.</p>
+          </Box>
+        </Box>
       )}
 
       {searching && (
-        <div className="flex items-center gap-2 text-sm text-gray-500">
-          <Search size={14} className="animate-pulse" />
-          Running semantic search...
-        </div>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, py: 4, justifyContent: "center" }}>
+          <CircularProgress size={20} />
+          <Typography variant="body2" color="text.secondary">Running semantic search...</Typography>
+        </Box>
+      )}
+
+      {searched && semanticResults.length === 0 && !searching && (
+        <Typography color="text.secondary">No semantic results found.</Typography>
       )}
 
       {semanticResults.length > 0 && (
-        <div>
-          <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-2">
-            <Search size={12} />
-            SEMANTIC RESULTS
-          </div>
-          <div className="grid gap-3">
+        <Box>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 1 }}>
+            <SearchOutlinedIcon sx={{ fontSize: 14 }} color="primary" />
+            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+              SEMANTIC RESULTS
+            </Typography>
+          </Box>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {semanticResults.map((r) => (
-              <div
-                key={r.article.id}
-                onClick={() => navigate(`/article/${r.article.id}`)}
-                className="border border-gray-200 rounded-lg p-4 bg-white hover:shadow-md transition-shadow cursor-pointer"
-              >
-                <div className="flex justify-between items-start">
-                  <h3 className="font-semibold text-gray-900">{r.article.title}</h3>
-                  <span className="text-xs font-mono bg-green-50 text-green-700 px-2 py-0.5 rounded">
-                    {(r.score * 100).toFixed(1)}%
-                  </span>
-                </div>
-                {r.article.summary && (
-                  <p className="text-sm text-gray-500 mt-1">{r.article.summary}</p>
-                )}
-                <div className="flex gap-1 mt-2 flex-wrap">
-                  {r.article.topics.map((t) => (
-                    <span key={t} className="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded">
-                      {t}
-                    </span>
-                  ))}
-                </div>
-              </div>
+              <Card key={r.article.id} variant="outlined" sx={{ transition: "box-shadow 0.2s", "&:hover": { boxShadow: 2 } }}>
+                <CardActionArea onClick={() => navigate("/article/" + r.article.id)}>
+                  <CardContent>
+                    <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                      <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>{r.article.title}</Typography>
+                      <Chip
+                        label={`${(r.score * 100).toFixed(1)}%`}
+                        size="small"
+                        color="success"
+                        variant="outlined"
+                        sx={{ fontFamily: "monospace", fontSize: "0.7rem" }}
+                      />
+                    </Box>
+                    {r.article.summary && (
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                        {r.article.summary}
+                      </Typography>
+                    )}
+                    <Box sx={{ display: "flex", gap: 0.5, mt: 1, flexWrap: "wrap" }}>
+                      {r.article.topics.map((t) => (
+                        <Chip key={t} label={t} size="small" color="primary" variant="outlined" sx={{ fontSize: "0.7rem" }} />
+                      ))}
+                    </Box>
+                  </CardContent>
+                </CardActionArea>
+              </Card>
             ))}
-          </div>
-        </div>
+          </Box>
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }

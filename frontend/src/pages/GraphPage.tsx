@@ -3,7 +3,17 @@ import { useNavigate } from "react-router-dom";
 import Fuse from "fuse.js";
 import ForceGraph2D, { type ForceGraphMethods, type NodeObject } from "react-force-graph-2d";
 import { api, type ArticleIndexItem, type GraphNode, type GraphEdge, type GraphStats } from "../api/client";
-import { Search, Network, Loader2 } from "lucide-react";
+import Typography from "@mui/material/Typography";
+import TextField from "@mui/material/TextField";
+import InputAdornment from "@mui/material/InputAdornment";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import Box from "@mui/material/Box";
+import Paper from "@mui/material/Paper";
+import CircularProgress from "@mui/material/CircularProgress";
+import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
+import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
+import ClearOutlinedIcon from "@mui/icons-material/ClearOutlined";
 
 interface GraphDataNode extends NodeObject {
   id: string;
@@ -24,16 +34,10 @@ interface GraphDataEdge {
 }
 
 const NODE_COLORS: Record<string, string> = {
-  Article: "#6366f1",
-  Topic: "#10b981",
-  Keyword: "#f59e0b",
-  Entity: "#ef4444",
-};
-
-const EDGE_COLORS: Record<string, string> = {
-  HAS_TOPIC: "#10b981",
-  HAS_KEYWORD: "#f59e0b",
-  MENTIONS_ENTITY: "#ef4444",
+  Article: "#5c6bc0",
+  Topic: "#26a69a",
+  Keyword: "#ffa726",
+  Entity: "#ef5350",
 };
 
 export default function GraphPage() {
@@ -116,84 +120,96 @@ export default function GraphPage() {
   }
 
   return (
-    <div className="max-w-4xl">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-bold text-gray-900">Knowledge Graph</h2>
+    <Box>
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+        <Typography variant="h5" sx={{ fontWeight: 600 }}>Knowledge Graph</Typography>
         {stats && (
-          <div className="flex gap-3 text-xs text-gray-500">
-            <span>{stats.articles} articles</span>
-            <span>{stats.topics} topics</span>
-            <span>{stats.keywords} keywords</span>
-            <span>{stats.entities} entities</span>
-          </div>
+          <Box sx={{ display: "flex", gap: 2 }}>
+            {Object.entries(stats).map(([key, val]) => (
+              <Chip key={key} label={`${val} ${key}`} size="small" variant="outlined" />
+            ))}
+          </Box>
         )}
-      </div>
+      </Box>
 
-      <div className="relative mb-6">
-        <div className="flex gap-2">
-          <div className="relative flex-1 max-w-md">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => handleInput(e.target.value)}
-              placeholder={indexLoading ? "Loading index..." : "Type to find an article..."}
-              disabled={indexLoading}
-              className="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
-            />
-          </div>
+      <Box sx={{ position: "relative", mb: 3, maxWidth: 480 }}>
+        <Box sx={{ display: "flex", gap: 1 }}>
+          <TextField
+            fullWidth
+            size="small"
+            value={query}
+            onChange={(e) => handleInput(e.target.value)}
+            placeholder={indexLoading ? "Loading index..." : "Type to find an article..."}
+            disabled={indexLoading}
+            slotProps={{
+              input: {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchOutlinedIcon fontSize="small" />
+                  </InputAdornment>
+                ),
+              },
+            }}
+          />
           {selectedId && (
-            <button onClick={clearSelection} className="text-sm text-gray-500 hover:text-gray-700 px-3 py-2 border border-gray-200 rounded-lg">
+            <Button variant="outlined" size="small" onClick={clearSelection} startIcon={<ClearOutlinedIcon />}>
               Clear
-            </button>
+            </Button>
           )}
-        </div>
+        </Box>
 
         {suggestions.length > 0 && (
-          <div className="absolute z-20 top-full mt-1 w-full max-w-md bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
+          <Paper
+            elevation={4}
+            sx={{
+              position: "absolute", zIndex: 20, top: "100%", mt: 0.5,
+              width: "100%", overflow: "hidden", borderRadius: 2,
+            }}
+          >
             {suggestions.map((s) => (
-              <div
+              <Box
                 key={s.id}
                 onClick={() => selectArticle(s)}
-                className="px-4 py-2.5 hover:bg-indigo-50 cursor-pointer border-b border-gray-100 last:border-0"
+                sx={{
+                  px: 2, py: 1.5, cursor: "pointer",
+                  borderBottom: "1px solid", borderColor: "divider",
+                  "&:hover": { bgcolor: "action.hover" },
+                }}
               >
-                <p className="text-sm font-medium text-gray-900">{s.title}</p>
+                <Typography variant="body2" sx={{ fontWeight: 500 }}>{s.title}</Typography>
                 {s.keywords.length > 0 && (
-                  <div className="flex gap-1 mt-1">
+                  <Box sx={{ display: "flex", gap: 0.5, mt: 0.5 }}>
                     {s.keywords.slice(0, 3).map((k) => (
-                      <span key={k} className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">{k}</span>
+                      <Chip key={k} label={k} size="small" variant="outlined" sx={{ fontSize: "0.65rem" }} />
                     ))}
-                  </div>
+                  </Box>
                 )}
-              </div>
+              </Box>
             ))}
-          </div>
+          </Paper>
         )}
-      </div>
+      </Box>
 
       {selectedId && (
-        <div className="mb-4 flex items-center gap-3">
-          <Network size={16} className="text-indigo-600" />
-          <span className="text-sm font-medium text-gray-700">{selectedTitle}</span>
-          <button onClick={() => navigate(`/article/${selectedId}`)} className="text-xs text-indigo-600 hover:underline">
-            View article
-          </button>
-        </div>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
+          <AccountTreeOutlinedIcon color="primary" fontSize="small" />
+          <Typography variant="body2" sx={{ fontWeight: 500 }}>{selectedTitle}</Typography>
+          <Button size="small" onClick={() => navigate(`/article/${selectedId}`)}>View article</Button>
+        </Box>
       )}
 
       {loading && (
-        <div className="flex items-center justify-center h-64 text-gray-400">
-          <Loader2 size={24} className="animate-spin mr-2" />
-          Loading graph...
-        </div>
+        <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", height: 256 }}>
+          <CircularProgress />
+        </Box>
       )}
 
       {!loading && nodes.length === 0 && (
-        <div className="text-center py-16 text-gray-400">
-          <Network size={40} className="mx-auto mb-3 opacity-50" />
-          <p className="text-sm">No graph data available yet.</p>
-          <p className="text-xs mt-1">Create and enrich articles to build the knowledge graph.</p>
-        </div>
+        <Box sx={{ textAlign: "center", py: 8 }}>
+          <AccountTreeOutlinedIcon sx={{ fontSize: 48, color: "text.disabled", mb: 1 }} />
+          <Typography color="text.disabled">No graph data available yet.</Typography>
+          <Typography variant="caption" color="text.disabled">Create and enrich articles to build the knowledge graph.</Typography>
+        </Box>
       )}
 
       {!loading && nodes.length > 0 && (
@@ -208,7 +224,7 @@ export default function GraphPage() {
           }}
         />
       )}
-    </div>
+    </Box>
   );
 }
 
@@ -232,13 +248,13 @@ function InteractiveGraph({
       type: n.type,
       nodeType: n.label,
       val: n.label === "Article" ? 3 : 1,
-      color: NODE_COLORS[n.label] || "#9ca3af",
+      color: NODE_COLORS[n.label] || "#9e9e9e",
     })),
     links: edges.map((e) => ({
       source: e.source,
       target: e.target,
       edgeType: e.type,
-      color: EDGE_COLORS[e.type] || "#d1d5db",
+      color: "#bdbdbd",
     })),
   }), [nodes, edges]);
 
@@ -265,11 +281,10 @@ function InteractiveGraph({
     fg.d3Force("link")?.distance(dist);
   }, [graphData, nodes.length]);
 
-  const nodeCount = nodes.length;
   const articleCount = nodes.filter((n) => n.label === "Article").length;
 
   return (
-    <div ref={containerRef}>
+    <Box ref={containerRef}>
       <ForceGraph2D<GraphDataNode, GraphDataEdge>
         ref={graphRef as React.MutableRefObject<ForceGraphMethods<GraphDataNode, GraphDataEdge> | undefined>}
         graphData={graphData}
@@ -284,43 +299,37 @@ function InteractiveGraph({
         nodeCanvasObject={(node, ctx, globalScale) => {
           const n = node as GraphDataNode;
           if (globalScale < 0.4) return;
-
           const label = n.title || n.name || n.id;
           const maxLen = globalScale > 1 ? 30 : 20;
-          const display = label.length > maxLen ? label.slice(0, maxLen - 1) + "…" : label;
+          const display = label.length > maxLen ? label.slice(0, maxLen - 1) + "\u2026" : label;
           const fontSize = Math.max(12 / globalScale, 3.5);
-          ctx.font = `${n.nodeType === "Article" ? "600 " : ""}${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`;
-
+          ctx.font = `${n.nodeType === "Article" ? "600 " : ""}${fontSize}px "Roboto", sans-serif`;
           const isCenter = n.id === selectedId;
           const r = n.nodeType === "Article"
             ? (isCenter ? 7 : 5) * (articleCount > 5 ? 0.8 : 1)
             : 3.5 * (articleCount > 5 ? 0.8 : 1);
-
           ctx.beginPath();
           ctx.arc(n.x!, n.y!, r, 0, 2 * Math.PI);
           ctx.fillStyle = n.color;
           ctx.fill();
           if (isCenter) {
-            ctx.strokeStyle = "#4338ca";
+            ctx.strokeStyle = "#26418f";
             ctx.lineWidth = 2;
             ctx.stroke();
           }
-
           const labelY = n.y! + r + 2;
           const textWidth = ctx.measureText(display).width;
           const pad = fontSize * 0.4;
-
           ctx.fillStyle = "rgba(255,255,255,0.9)";
           ctx.beginPath();
           ctx.roundRect(n.x! - textWidth / 2 - pad, labelY - fontSize * 0.15, textWidth + pad * 2, fontSize * 1.35, 2);
           ctx.fill();
-
           ctx.textAlign = "center";
           ctx.textBaseline = "top";
-          ctx.fillStyle = isCenter ? "#4338ca" : n.nodeType === "Article" ? "#1f2937" : "#6b7280";
+          ctx.fillStyle = isCenter ? "#26418f" : n.nodeType === "Article" ? "#212121" : "#757575";
           ctx.fillText(display, n.x!, labelY);
         }}
-        linkColor={() => "rgba(156,163,175,0.5)"}
+        linkColor={() => "rgba(189,189,189,0.5)"}
         linkWidth={1}
         linkDirectionalArrowLength={3.5}
         linkDirectionalArrowRelPos={0.9}
@@ -341,15 +350,15 @@ function InteractiveGraph({
           node.fy = node.y;
         }}
       />
-      <div className="flex gap-4 mt-2 justify-center">
+      <Box sx={{ display: "flex", gap: 2, mt: 1, justifyContent: "center", alignItems: "center" }}>
         {Object.entries(NODE_COLORS).map(([label, color]) => (
-          <div key={label} className="flex items-center gap-1.5 text-xs text-gray-500">
-            <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
-            {label}
-          </div>
+          <Box key={label} sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+            <Box sx={{ width: 12, height: 12, borderRadius: "50%", bgcolor: color }} />
+            <Typography variant="caption" color="text.secondary">{label}</Typography>
+          </Box>
         ))}
-        <span className="text-xs text-gray-400">{nodeCount} nodes · {edges.length} edges</span>
-      </div>
-    </div>
+        <Typography variant="caption" color="text.disabled">{nodes.length} nodes &middot; {edges.length} edges</Typography>
+      </Box>
+    </Box>
   );
 }

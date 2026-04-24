@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { api, type ArticleListItem } from "../api/client";
 import ArticleCard from "../components/ArticleCard";
+import Typography from "@mui/material/Typography";
+import Pagination from "@mui/material/Pagination";
+import Box from "@mui/material/Box";
 
 export default function HomePage() {
   const [articles, setArticles] = useState<ArticleListItem[]>([]);
@@ -17,41 +20,31 @@ export default function HomePage() {
   const totalPages = Math.ceil(total / 20);
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold text-gray-900">Articles</h2>
-        <span className="text-sm text-gray-500">{total} total</span>
-      </div>
+    <Box>
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
+        <Typography variant="h5" sx={{ fontWeight: 600 }}>Articles</Typography>
+        <Typography variant="body2" color="text.secondary">{total} total</Typography>
+      </Box>
       {articles.length === 0 ? (
-        <p className="text-gray-500">No articles yet. Create your first one!</p>
+        <Typography color="text.secondary">No articles yet. Create your first one!</Typography>
       ) : (
-        <div className="grid gap-3">
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
           {articles.map((a) => (
             <ArticleCard key={a.id} article={a} />
           ))}
-        </div>
+        </Box>
       )}
       {totalPages > 1 && (
-        <div className="flex gap-2 mt-4 justify-center">
-          <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page === 1}
-            className="px-3 py-1 text-sm border rounded-lg disabled:opacity-50"
-          >
-            Previous
-          </button>
-          <span className="px-3 py-1 text-sm text-gray-600">
-            Page {page} of {totalPages}
-          </span>
-          <button
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page === totalPages}
-            className="px-3 py-1 text-sm border rounded-lg disabled:opacity-50"
-          >
-            Next
-          </button>
-        </div>
+        <Box sx={{ display: "flex", justifyContent: "center", mt: 3 }}>
+          <Pagination
+            count={totalPages}
+            page={page}
+            onChange={(_, p) => setPage(p)}
+            color="primary"
+            shape="rounded"
+          />
+        </Box>
       )}
-    </div>
+    </Box>
   );
 }

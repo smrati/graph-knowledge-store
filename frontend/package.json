@@ -10,11 +10,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/icons-material": "^9.0.0",
+    "@mui/material": "^9.0.0",
     "@tailwindcss/typography": "^0.5.19",
     "@uiw/react-md-editor": "^4.1.0",
     "force-graph": "^1.51.4",
     "fuse.js": "^7.3.0",
-    "lucide-react": "^1.9.0",
+    "notistack": "^3.0.2",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-force-graph-2d": "^1.29.1",
