@@ -59,6 +59,7 @@ Open http://localhost:5173.
 **Async patterns:**
 - Postgres operations use `asyncpg` via SQLAlchemy async
 - Neo4j operations are synchronous (Neo4j Python driver limitation)
+- All Neo4j calls from async handlers run in `ThreadPoolExecutor`
 - Background tasks use FastAPI's `BackgroundTasks`, not Celery
 - Background tasks that need a database session create their own via `async_session_factory()`
 
@@ -74,12 +75,21 @@ Open http://localhost:5173.
 - `src/api/` — HTTP client and TypeScript interfaces
 - `src/components/` — reusable UI components
 - `src/pages/` — top-level route components
+- `src/theme.ts` — MUI Material Design theme
 
 **Conventions:**
 - One component per file, default export
 - TypeScript interfaces for all API data
-- TailwindCSS utility classes for styling (no custom CSS files beyond `index.css`)
+- MUI components for UI elements (Card, Button, Chip, TextField, etc.)
+- TailwindCSS utility classes for layout (flex, gap, grid) — coexists with MUI
 - Route definitions centralized in `App.tsx`
+- All API calls go through the centralized `api` client in `src/api/client.ts`
+- Snackbar notifications via `notistack` for user feedback
+
+**Material Design theme:**
+- Theme defined in `src/theme.ts` with indigo primary, teal secondary
+- `MaterialThemeProvider` wraps the app with `ThemeProvider`, `CssBaseline`, and `SnackbarProvider`
+- Sidebar navigation uses MUI `Drawer` with `ListItemButton` (active state highlighted)
 
 ## Database Migrations
 
@@ -186,3 +196,6 @@ ollama pull qwen3-embedding:0.6b        # Pull embedding model
 
 ### Frontend proxy not working
 Verify `vite.config.ts` has the proxy config pointing to `http://localhost:8000`. The backend must be running on port 8000.
+
+### Neo4j graph not showing data
+Articles must be enriched first (enrichment_status = "completed") before graph nodes appear. If Neo4j was down during enrichment, re-save the article to trigger re-enrichment.

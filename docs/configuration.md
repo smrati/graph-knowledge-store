@@ -19,7 +19,7 @@ These control which LLM provider and models the application uses.
 |----------|---------|-------------|
 | `LLM_BASE_URL` | `http://localhost:11434/v1` | OpenAI-compatible API base URL |
 | `LLM_API_KEY` | `ollama` | API key (unused by Ollama, required by OpenAI) |
-| `LLM_CHAT_MODEL` | `gemma2:9b-instruct-q4_K_M` | Model for chat completions (metadata extraction) |
+| `LLM_CHAT_MODEL` | `gemma2:9b-instruct-q4_K_M` | Model for chat completions (metadata extraction, title generation, equation normalization) |
 | `LLM_EMBEDDING_MODEL` | `qwen3-embedding:0.6b` | Model for text embeddings |
 | `LLM_EMBEDDING_DIMENSIONS` | `1024` | Vector dimension of the embedding model output |
 

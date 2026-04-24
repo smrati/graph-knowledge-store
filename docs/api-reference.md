@@ -29,9 +29,13 @@ Create a new article. Triggers background enrichment (LLM extraction, embedding,
 ```json
 {
   "title": "Introduction to Neural Networks",
-  "content": "# Neural Networks\n\nA neural network is..."
+  "content": "# Neural Networks\n\nA neural network is...",
+  "fix_equations": false
 }
 ```
+
+- `title` is optional — if omitted, auto-generated via LLM
+- `fix_equations` is optional (default false) — runs LLM-powered LaTeX delimiter normalization
 
 **Response** (201 Created):
 ```json
@@ -55,7 +59,7 @@ Create a new article. Triggers background enrichment (LLM extraction, embedding,
 
 ### `GET /api/articles`
 
-List articles paginated, ordered by most recently updated.
+List articles paginated, ordered by most recently updated. Supports optional filtering by topic or keyword.
 
 **Query Parameters:**
 
@@ -63,6 +67,17 @@ List articles paginated, ordered by most recently updated.
 |-------|------|---------|-------------|
 | `page` | integer | 1 | Page number (1-indexed) |
 | `limit` | integer | 20 | Results per page (max 100) |
+| `topic` | string | — | Filter by topic (case-insensitive) |
+| `keyword` | string | — | Filter by keyword (case-insensitive) |
+
+Filtering uses case-insensitive matching against the JSONB arrays.
+
+**Examples:**
+```
+GET /api/articles?page=2&limit=10
+GET /api/articles?topic=machine+learning
+GET /api/articles?keyword=backpropagation
+```
 
 **Response:**
 ```json
@@ -85,6 +100,28 @@ List articles paginated, ordered by most recently updated.
 ```
 
 Note: `content` is not included in list responses.
+
+---
+
+### `GET /api/articles/index`
+
+Returns a lightweight index of all articles for client-side search. Only includes `id`, `title`, `summary`, `keywords` — no content or pagination.
+
+**Response:**
+```json
+{
+  "articles": [
+    {
+      "id": "...",
+      "title": "...",
+      "summary": "...",
+      "keywords": ["kw1", "kw2"]
+    }
+  ]
+}
+```
+
+Used by fuse.js on the Search and Graph pages for instant type-ahead suggestions.
 
 ---
 
@@ -114,11 +151,12 @@ Update an article. If `content` changes, triggers background re-enrichment.
 ```json
 {
   "title": "Updated Title",
-  "content": "Updated content..."
+  "content": "Updated content...",
+  "fix_equations": true
 }
 ```
 
-Both fields are optional. Only provided fields are updated.
+Both `title` and `content` are optional. Only provided fields are updated.
 
 **Response:** Updated `ArticleResponse`.
 
@@ -188,6 +226,27 @@ hybrid_score = alpha × vector_score + (1 - alpha) × graph_score
 
 ## Graph
 
+### `GET /api/graph/full`
+
+Get the entire knowledge graph (all nodes and edges).
+
+**Response:**
+```json
+{
+  "nodes": [
+    {"id": "...", "label": "Article", "title": "..."},
+    {"id": "AI", "label": "Topic", "name": "AI"}
+  ],
+  "edges": [
+    {"source": "...", "target": "AI", "type": "HAS_TOPIC"}
+  ]
+}
+```
+
+Used by the Graph page to render the full network on load.
+
+---
+
 ### `GET /api/graph/article/{id}/neighbors`
 
 Find articles related to the given article through shared topics, keywords, or entities.
@@ -220,13 +279,13 @@ Find articles related to the given article through shared topics, keywords, or e
 
 ### `GET /api/graph/article/{id}/subgraph`
 
-Get the subgraph surrounding an article (1-2 hops) for visualization.
+Get the subgraph surrounding an article for visualization. Traversal depth is configurable.
 
 **Query Parameters:**
 
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
-| `depth` | integer | 2 | Traversal depth (1 or 2) |
+| `depth` | integer | 2 | Traversal depth (1-3, clamped) |
 
 **Response:**
 ```json
@@ -263,3 +322,9 @@ Get counts of nodes in the graph.
   "entities": 31
 }
 ```
+
+---
+
+## Graph API Notes
+
+All graph endpoints wrap synchronous Neo4j calls in `ThreadPoolExecutor` to avoid blocking the FastAPI async event loop.

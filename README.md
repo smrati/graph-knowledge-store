@@ -98,8 +98,9 @@ graph-knowledge-store/
 ├── frontend/                   # React + TypeScript frontend
 │   └── src/
 │       ├── api/                # HTTP client
-│       ├── components/         # UI components
-│       └── pages/              # Route pages
+│       ├── components/         # UI components (MUI)
+│       ├── pages/              # Route pages
+│       └── theme.ts            # Material Design theme
 ├── alembic/                    # Database migrations
 ├── docs/                       # Documentation
 ├── docker-compose.yml          # Postgres + Neo4j
@@ -111,16 +112,30 @@ graph-knowledge-store/
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/api/articles` | Create article |
-| `GET` | `/api/articles` | List articles (paginated) |
+| `POST` | `/api/articles` | Create article (title auto-generated if omitted) |
+| `GET` | `/api/articles` | List articles (paginated, filterable by `?topic=` or `?keyword=`) |
+| `GET` | `/api/articles/index` | Lightweight article index for client-side search |
 | `GET` | `/api/articles/{id}` | Get article |
 | `PUT` | `/api/articles/{id}` | Update article |
 | `DELETE` | `/api/articles/{id}` | Delete article |
 | `GET` | `/api/search?q=...&mode=semantic\|hybrid` | Search articles |
+| `GET` | `/api/graph/full` | Full knowledge graph |
 | `GET` | `/api/graph/article/{id}/neighbors` | Related articles via graph |
 | `GET` | `/api/graph/article/{id}/subgraph` | Subgraph for visualization |
 | `GET` | `/api/graph/stats` | Graph statistics |
 | `GET` | `/api/health` | Health check |
+
+## Features
+
+- **Markdown editor** with live preview, LaTeX math rendering (KaTeX), and table support
+- **Auto-generated titles** via LLM when title is omitted
+- **LLM enrichment** — automatic topic, keyword, entity extraction, and summary generation
+- **Semantic search** — vector similarity search with instant type-ahead via fuse.js
+- **Hybrid search** — combines vector similarity with graph-based relationship scores
+- **Knowledge graph** — interactive force-directed visualization with zoom, pan, and drag
+- **Clickable topics/keywords** — filter articles by clicking topic or keyword chips
+- **Related articles** — graph-based related article suggestions
+- **Material Design UI** — MUI component library with consistent theme
 
 ## Documentation
 

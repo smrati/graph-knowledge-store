@@ -5,10 +5,12 @@
 ```
 User writes markdown in browser
         │
-        ▼  POST /api/articles {title, content}
+        ▼  POST /api/articles {title?, content, fix_equations?}
 ┌───────────────┐
 │  FastAPI       │  Synchronous
-│  article_svc   │──────────▶ Save to Postgres (enrichment_status="pending")
+│  article_svc   │──────────▶ If no title: generate_title() via LLM
+│                │──────────▶ If fix_equations: normalize_markdown_equations()
+│                │──────────▶ Save to Postgres (enrichment_status="pending")
 └───────┬───────┘             Return 201 immediately
         │
         │  Background Task (_enrich_article)
@@ -37,7 +39,7 @@ The user gets an immediate response after step 1. Steps 2-4 run in the backgroun
 ## Article Update
 
 ```
-PUT /api/articles/{id} {title?, content?}
+PUT /api/articles/{id} {title?, content?, fix_equations?}
         │
         ▼
 Update Postgres (only changed fields)
@@ -117,6 +119,67 @@ The `alpha` parameter (0.0 to 1.0, default 0.5) controls the balance:
 - `alpha=1.0` — pure semantic search (ignores graph)
 - `alpha=0.0` — pure graph search (ignores semantics)
 - `alpha=0.5` — equal weight (default)
+
+## Client-Side Type-Ahead Search
+
+```
+User types in search/graph input
+        │
+        ▼  On page load: GET /api/articles/index
+Build fuse.js index (title, summary, keywords)
+        │
+        ▼  On keystroke (150ms debounce, min 2 chars):
+fuse.search(query, {limit: 8})
+        │
+        ▼
+Display "Quick Matches" instantly (< 10ms)
+        │
+        ▼  On form submit (explicit):
+GET /api/search?q=...&mode=semantic|hybrid
+        │
+        ▼
+Display "Semantic Results" from server
+```
+
+Type-ahead uses the lightweight `/api/articles/index` endpoint (no content, no pagination) and runs entirely client-side via fuse.js. The full semantic search only fires on explicit submit.
+
+## Graph Visualization
+
+```
+User visits /graph page
+        │
+        ▼  On load:
+GET /api/graph/full → render full network
+GET /api/graph/stats → show node counts
+GET /api/articles/index → build fuse.js for article search
+        │
+        ▼  User types in search → fuse.js suggestions
+        │
+        ▼  User selects article (or clicks node):
+GET /api/graph/article/{id}/subgraph?depth=2
+        │
+        ▼
+Render zoomed subgraph neighborhood
+        │
+        ▼  User clicks "Clear":
+GET /api/graph/full → back to full network
+```
+
+The graph uses `react-force-graph-2d` with force-directed layout, draggable nodes, zoom, and pan.
+
+## Topic/Keyword Filtering
+
+```
+User clicks topic/keyword chip on article detail or card
+        │
+        ▼  Navigate to /?topic=X or /?keyword=Y
+        │
+        ▼
+GET /api/articles?topic=X  (case-insensitive JSONB match)
+        │
+        ▼
+Display filtered article list with dismissible filter chip
+```
 
 ## Graph Neighbor Query
 

@@ -9,7 +9,7 @@ The Pgvector extension is enabled via Alembic migration. All migrations live in 
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
 | `id` | UUID | No | `gen_random_uuid()` | Primary key |
-| `title` | VARCHAR(500) | No | — | Article title |
+| `title` | VARCHAR(500) | No | — | Article title (auto-generated if omitted on create) |
 | `content` | TEXT | No | — | Markdown content |
 | `summary` | TEXT | Yes | — | LLM-generated 1-2 sentence summary |
 | `topics` | JSONB | No | `[]` | Array of strings, e.g. `["AI", "Python"]` |
@@ -18,6 +18,19 @@ The Pgvector extension is enabled via Alembic migration. All migrations live in 
 | `enrichment_status` | VARCHAR(20) | No | `"pending"` | One of: `pending`, `processing`, `completed`, `failed` |
 | `created_at` | TIMESTAMPTZ | No | `now()` | Creation timestamp |
 | `updated_at` | TIMESTAMPTZ | No | `now()` | Last update timestamp (auto-updated) |
+
+#### Querying JSONB arrays
+
+Filtering by topic or keyword uses case-insensitive matching:
+
+```sql
+-- Find all articles with topic "machine learning" (case-insensitive)
+SELECT * FROM articles
+WHERE EXISTS (
+  SELECT 1 FROM jsonb_array_elements_text(articles.topics) elem
+  WHERE LOWER(elem) = LOWER('Machine Learning')
+);
+```
 
 ### `article_embeddings` table
 
