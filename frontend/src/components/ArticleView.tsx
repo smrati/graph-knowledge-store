@@ -66,10 +66,25 @@ export default function ArticleView() {
       {(article.topics.length > 0 || article.keywords.length > 0) && (
         <Box sx={{ display: "flex", gap: 0.5, mb: 3, flexWrap: "wrap" }}>
           {article.topics.map((t: string) => (
-            <Chip key={t} label={t} size="small" color="primary" variant="outlined" />
+            <Chip
+              key={t}
+              label={t}
+              size="small"
+              color="primary"
+              variant="outlined"
+              clickable
+              onClick={() => navigate("/?topic=" + encodeURIComponent(t))}
+            />
           ))}
           {article.keywords.map((k: string) => (
-            <Chip key={k} label={k} size="small" variant="outlined" />
+            <Chip
+              key={k}
+              label={k}
+              size="small"
+              variant="outlined"
+              clickable
+              onClick={() => navigate("/?keyword=" + encodeURIComponent(k))}
+            />
           ))}
         </Box>
       )}

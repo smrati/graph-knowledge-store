@@ -53,7 +53,16 @@ export default function ArticleCard({ article }: { article: ArticleListItem }) {
           </CardContent>
           <Box sx={{ px: 2, pb: 0.5, display: "flex", gap: 0.5, flexWrap: "wrap" }}>
             {article.topics.slice(0, 4).map((t) => (
-              <Chip key={t} label={t} size="small" color="primary" variant="outlined" sx={{ fontSize: "0.7rem" }} />
+              <Chip
+                key={t}
+                label={t}
+                size="small"
+                color="primary"
+                variant="outlined"
+                clickable
+                onClick={(e) => { e.stopPropagation(); navigate("/?topic=" + encodeURIComponent(t)); }}
+                sx={{ fontSize: "0.7rem" }}
+              />
             ))}
           </Box>
           <Box sx={{ px: 2, pt: 0.5, pb: 1 }}>

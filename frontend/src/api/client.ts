@@ -94,8 +94,12 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  listArticles: (page = 1, limit = 20) =>
-    request<ArticleListResponse>(`/articles?page=${page}&limit=${limit}`),
+  listArticles: (page = 1, limit = 20, filters?: { topic?: string; keyword?: string }) => {
+    let path = `/articles?page=${page}&limit=${limit}`;
+    if (filters?.topic) path += `&topic=${encodeURIComponent(filters.topic)}`;
+    if (filters?.keyword) path += `&keyword=${encodeURIComponent(filters.keyword)}`;
+    return request<ArticleListResponse>(path);
+  },
 
   getArticlesIndex: () =>
     request<{ articles: ArticleIndexItem[] }>("/articles/index"),

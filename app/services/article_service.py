@@ -5,7 +5,8 @@ from concurrent.futures import ThreadPoolExecutor
 from functools import partial
 
 from fastapi import BackgroundTasks
-from sqlalchemy import delete, func, select
+from sqlalchemy import cast, delete, func, literal, select, String, Text, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.article import Article
@@ -47,15 +48,27 @@ async def get_article(session: AsyncSession, article_id: uuid.UUID) -> Article |
 
 
 async def list_articles(
-    session: AsyncSession, page: int = 1, limit: int = 20
+    session: AsyncSession, page: int = 1, limit: int = 20,
+    *, topic: str | None = None, keyword: str | None = None,
 ) -> ArticleListResponse:
     offset = (page - 1) * limit
-    total_result = await session.execute(select(func.count()).select_from(Article))
+
+    stmt = select(Article).order_by(Article.updated_at.desc())
+    count_stmt = select(func.count()).select_from(Article)
+
+    if topic:
+        cond = text("EXISTS (SELECT 1 FROM jsonb_array_elements_text(articles.topics) elem WHERE LOWER(elem) = LOWER(:topic))")
+        stmt = stmt.where(cond).params(topic=topic)
+        count_stmt = count_stmt.where(cond).params(topic=topic)
+    if keyword:
+        cond = text("EXISTS (SELECT 1 FROM jsonb_array_elements_text(articles.keywords) elem WHERE LOWER(elem) = LOWER(:keyword))")
+        stmt = stmt.where(cond).params(keyword=keyword)
+        count_stmt = count_stmt.where(cond).params(keyword=keyword)
+
+    total_result = await session.execute(count_stmt)
     total = total_result.scalar() or 0
 
-    result = await session.execute(
-        select(Article).order_by(Article.updated_at.desc()).offset(offset).limit(limit)
-    )
+    result = await session.execute(stmt.offset(offset).limit(limit))
     articles = result.scalars().all()
 
     return ArticleListResponse(
