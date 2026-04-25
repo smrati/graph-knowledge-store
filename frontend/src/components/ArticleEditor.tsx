@@ -2,6 +2,7 @@ import { useState } from "react";
 import MDEditor from "@uiw/react-md-editor";
 import { useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
+import { useThemeMode } from "./MaterialThemeProvider";
 import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
 import TextField from "@mui/material/TextField";
@@ -66,8 +67,10 @@ export default function ArticleEditor() {
     ? loading || !content.trim() || !title.trim()
     : loading || !content.trim();
 
+  const { dark } = useThemeMode();
+
   return (
-    <Box sx={{ maxWidth: 900 }} data-color-mode="light">
+    <Box sx={{ maxWidth: 900 }} data-color-mode={dark ? "dark" : "light"}>
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
         <Typography variant="h5" sx={{ fontWeight: 600 }}>
           {isEditing ? "Edit Article" : "New Article"}

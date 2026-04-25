@@ -101,7 +101,7 @@ GET /api/search?q=...&mode=hybrid&alpha=0.5
         ▼
 2. For each candidate article, query Neo4j neighbors:
    MATCH (a)-[:HAS_TOPIC|HAS_KEYWORD|MENTIONS_ENTITY]->(n)
-         <-[:HAS_TOPIC|HAS_KEYWORD|MENTS_ENTITY]-(other:Article)
+         <-[:HAS_TOPIC|HAS_KEYWORD|MENTIONS_ENTITY]-(other:Article)
    Count shared nodes → graph_score
         │
         ▼
@@ -123,10 +123,10 @@ The `alpha` parameter (0.0 to 1.0, default 0.5) controls the balance:
 ## Client-Side Type-Ahead Search
 
 ```
-User types in search/graph input
+User types in search/graph/quiz input
         │
         ▼  On page load: GET /api/articles/index
-Build fuse.js index (title, summary, keywords)
+Build fuse.js index (title, summary, topics, keywords)
         │
         ▼  On keystroke (150ms debounce, min 2 chars):
 fuse.search(query, {limit: 8})
@@ -165,7 +165,7 @@ Render zoomed subgraph neighborhood
 GET /api/graph/full → back to full network
 ```
 
-The graph uses `react-force-graph-2d` with force-directed layout, draggable nodes, zoom, and pan.
+The graph uses `react-force-graph-2d` with force-directed layout, draggable nodes, zoom, and pan. Node colors adapt to dark mode (lighter pastel variants on dark background).
 
 ## Topic/Keyword Filtering
 
@@ -179,6 +179,31 @@ GET /api/articles?topic=X  (case-insensitive JSONB match)
         │
         ▼
 Display filtered article list with dismissible filter chip
+and "Take Quiz" button
+```
+
+## Quiz Generation
+
+```
+User selects topics + keywords on Quiz page (multi-select with fuse.js type-ahead)
+        │
+        ▼  POST /api/quiz/generate {topics, keywords, quiz_type, num_questions}
+        │
+        ▼  Backend:
+1. Fetch matching articles (OR logic across all topics/keywords)
+2. Build prompt: summaries + metadata from ALL articles
+                   + full content from SAMPLED subset (max 6)
+3. Cap prompt at 8000 chars
+4. Send to LLM → parse JSON response
+        │
+        ▼  Frontend:
+QuizRunner renders based on quiz_type:
+  - MCQ: 4 options, green/red feedback, explanation, auto-advance
+  - Short Answer: text input → model answer + key points → self-score
+  - Flashcard: click to flip → "Got It" / "Missed It" self-rating
+        │
+        ▼
+Score card at end with "Try Again" button
 ```
 
 ## Graph Neighbor Query
@@ -187,13 +212,15 @@ Display filtered article list with dismissible filter chip
 GET /api/graph/article/{id}/neighbors
         │
         ▼
-MATCH (a:Article {id})-[:HAS_TOPIC|HAS_KEYWORD|MENTS_ENTITY]->(n)
-      <-[:HAS_TOPIC|HAS_KEYWORD|MENTS_ENTITY]-(other:Article)
-RETURN other, count(n) AS shared_nodes
+MATCH (a:Article {id})-[:HAS_TOPIC|HAS_KEYWORD|MENTIONS_ENTITY]->(n)
+      <-[:HAS_TOPIC|HAS_KEYWORD|MENTIONS_ENTITY]-(other:Article)
+WITH other, count(DISTINCT n) AS shared_nodes,
+     collect(DISTINCT ...label)[0] AS connection_type
+RETURN other, shared_nodes, connection_type
 ORDER BY shared_nodes DESC
 ```
 
-This finds articles connected through shared Topic, Keyword, or Entity nodes. More shared nodes = stronger relationship.
+Results are deduplicated: each neighbor article appears exactly once, even if connected through multiple shared nodes of different types.
 
 ## Source of Truth
 
@@ -203,4 +230,32 @@ This finds articles connected through shared Topic, Keyword, or Entity nodes. Mo
 Postgres articles + LLM extraction → Neo4j nodes + relationships
 ```
 
-If Neo4j data is lost or corrupted, it can be rebuilt by re-running enrichment on all articles.
+If Neo4j data is lost or corrupted, it can be rebuilt by running:
+```bash
+make rebuild-graph          # rebuild graph + embeddings
+make rebuild-graph-only     # rebuild graph only
+make rebuild-embeddings     # rebuild embeddings only
+```
+
+## Backup & Restore
+
+```
+make backup
+        │
+        ▼
+1. pg_dump from Postgres container → postgres_backup.sql
+2. Copy .env → env_backup
+3. Compress to backups/backup_YYYYMMDD_HHMMSS.tar.gz
+4. Auto-cleanup: keep last 10 backups
+
+make restore
+        │
+        ▼
+1. List available backups (interactive menu)
+2. User confirms restore
+3. docker compose down + delete Postgres volume
+4. docker compose up -d (fresh Postgres)
+5. Restore SQL dump into new database
+6. Run alembic upgrade head
+7. Print: "Run make rebuild-graph to rebuild Neo4j"
+```

@@ -66,7 +66,7 @@ List articles paginated, ordered by most recently updated. Supports optional fil
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
 | `page` | integer | 1 | Page number (1-indexed) |
-| `limit` | integer | 20 | Results per page (max 100) |
+| `limit` | integer | 10 | Results per page (min 10, max 100) |
 | `topic` | string | — | Filter by topic (case-insensitive) |
 | `keyword` | string | — | Filter by keyword (case-insensitive) |
 
@@ -74,7 +74,7 @@ Filtering uses case-insensitive matching against the JSONB arrays.
 
 **Examples:**
 ```
-GET /api/articles?page=2&limit=10
+GET /api/articles?page=2&limit=25
 GET /api/articles?topic=machine+learning
 GET /api/articles?keyword=backpropagation
 ```
@@ -95,7 +95,7 @@ GET /api/articles?keyword=backpropagation
   ],
   "total": 42,
   "page": 1,
-  "limit": 20
+  "limit": 10
 }
 ```
 
@@ -105,7 +105,7 @@ Note: `content` is not included in list responses.
 
 ### `GET /api/articles/index`
 
-Returns a lightweight index of all articles for client-side search. Only includes `id`, `title`, `summary`, `keywords` — no content or pagination.
+Returns a lightweight index of all articles for client-side search. Includes `id`, `title`, `summary`, `topics`, `keywords` — no content or pagination.
 
 **Response:**
 ```json
@@ -115,13 +115,14 @@ Returns a lightweight index of all articles for client-side search. Only include
       "id": "...",
       "title": "...",
       "summary": "...",
+      "topics": ["AI", "Deep Learning"],
       "keywords": ["kw1", "kw2"]
     }
   ]
 }
 ```
 
-Used by fuse.js on the Search and Graph pages for instant type-ahead suggestions.
+Used by fuse.js on the Search, Graph, and Quiz pages for instant type-ahead suggestions.
 
 ---
 
@@ -185,7 +186,7 @@ Search articles by semantic similarity or hybrid (semantic + graph) ranking.
 | Param | Type | Default | Description |
 |-------|------|---------|-------------|
 | `q` | string | *required* | Search query |
-| `limit` | integer | 10 | Max results (1-50) |
+| `limit` | integer | 10 | Max results (1-100) |
 | `mode` | string | `"semantic"` | `"semantic"` or `"hybrid"` |
 | `alpha` | float | 0.5 | Weight for semantic vs graph (0.0-1.0, only for hybrid mode) |
 
@@ -249,7 +250,7 @@ Used by the Graph page to render the full network on load.
 
 ### `GET /api/graph/article/{id}/neighbors`
 
-Find articles related to the given article through shared topics, keywords, or entities.
+Find articles related to the given article through shared topics, keywords, or entities. Results are deduplicated using `count(DISTINCT n)` and `collect(DISTINCT ...)`.
 
 **Query Parameters:**
 
@@ -272,8 +273,7 @@ Find articles related to the given article through shared topics, keywords, or e
 }
 ```
 
-`shared_nodes` — number of shared Topic/Keyword/Entity nodes (higher = more related).
-`connection_type` — the most common node label shared between the two articles.
+`shared_nodes` — number of distinct shared Topic/Keyword/Entity nodes (higher = more related). Each neighbor appears only once even if connected through multiple shared nodes.
 
 ---
 
@@ -322,6 +322,60 @@ Get counts of nodes in the graph.
   "entities": 31
 }
 ```
+
+---
+
+## Quiz
+
+### `POST /api/quiz/generate`
+
+Generate a quiz from articles matching selected topics and/or keywords. Uses OR logic — articles matching any filter qualify.
+
+**Request Body:**
+```json
+{
+  "topics": ["machine learning", "neural networks"],
+  "keywords": ["backpropagation"],
+  "quiz_type": "mcq",
+  "num_questions": 5
+}
+```
+
+**Fields:**
+- `topics` — list of topics (at least one topic or keyword required)
+- `keywords` — list of keywords
+- `quiz_type` — one of: `"mcq"`, `"short_answer"`, `"flashcard"`
+- `num_questions` — number of questions (1-15)
+
+**Context efficiency:** Sends summaries + metadata from all matching articles, plus full content from a sampled subset (max 6). Total prompt capped at 8000 chars.
+
+**Response:**
+```json
+{
+  "quiz_type": "mcq",
+  "topics": ["machine learning"],
+  "keywords": ["backpropagation"],
+  "article_count": 8,
+  "questions": [
+    {
+      "question": "What is the primary purpose of backpropagation?",
+      "options": [
+        {"label": "A", "text": "Data preprocessing"},
+        {"label": "B", "text": "Computing gradients for weight updates"},
+        {"label": "C", "text": "Feature extraction"},
+        {"label": "D", "text": "Regularization"}
+      ],
+      "correct_index": 1,
+      "explanation": "Backpropagation computes the gradient of the loss function with respect to each weight by the chain rule."
+    }
+  ]
+}
+```
+
+**Errors:**
+- `400` — No topics or keywords provided, or invalid `quiz_type`
+- `404` — No articles found matching the filters
+- `500` — LLM failed to generate valid quiz questions
 
 ---
 

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Fuse from "fuse.js";
 import ForceGraph2D, { type ForceGraphMethods, type NodeObject } from "react-force-graph-2d";
 import { api, type ArticleIndexItem, type GraphNode, type GraphEdge, type GraphStats } from "../api/client";
+import { useThemeMode } from "../components/MaterialThemeProvider";
 import Typography from "@mui/material/Typography";
 import TextField from "@mui/material/TextField";
 import InputAdornment from "@mui/material/InputAdornment";
@@ -33,11 +34,18 @@ interface GraphDataEdge {
   color: string;
 }
 
-const NODE_COLORS: Record<string, string> = {
+const NODE_COLORS_LIGHT: Record<string, string> = {
   Article: "#5c6bc0",
   Topic: "#26a69a",
   Keyword: "#ffa726",
   Entity: "#ef5350",
+};
+
+const NODE_COLORS_DARK: Record<string, string> = {
+  Article: "#9fa8da",
+  Topic: "#80cbc4",
+  Keyword: "#ffb74d",
+  Entity: "#ef9a9a",
 };
 
 export default function GraphPage() {
@@ -239,6 +247,8 @@ function InteractiveGraph({
   selectedId: string | null;
   onArticleSelect: (id: string, title: string) => void;
 }) {
+  const { dark } = useThemeMode();
+  const nodeColors = dark ? NODE_COLORS_DARK : NODE_COLORS_LIGHT;
   const graphData = useMemo(() => ({
     nodes: nodes.map((n) => ({
       id: n.id,
@@ -248,7 +258,7 @@ function InteractiveGraph({
       type: n.type,
       nodeType: n.label,
       val: n.label === "Article" ? 3 : 1,
-      color: NODE_COLORS[n.label] || "#9e9e9e",
+      color: nodeColors[n.label] || "#9e9e9e",
     })),
     links: edges.map((e) => ({
       source: e.source,
@@ -256,7 +266,7 @@ function InteractiveGraph({
       edgeType: e.type,
       color: "#bdbdbd",
     })),
-  }), [nodes, edges]);
+  }), [nodes, edges, nodeColors]);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<ForceGraphMethods<GraphDataNode, GraphDataEdge>>(null);
@@ -313,28 +323,28 @@ function InteractiveGraph({
           ctx.fillStyle = n.color;
           ctx.fill();
           if (isCenter) {
-            ctx.strokeStyle = "#26418f";
+            ctx.strokeStyle = dark ? "#b0bec5" : "#26418f";
             ctx.lineWidth = 2;
             ctx.stroke();
           }
           const labelY = n.y! + r + 2;
           const textWidth = ctx.measureText(display).width;
           const pad = fontSize * 0.4;
-          ctx.fillStyle = "rgba(255,255,255,0.9)";
+          ctx.fillStyle = dark ? "rgba(30,30,46,0.92)" : "rgba(255,255,255,0.9)";
           ctx.beginPath();
           ctx.roundRect(n.x! - textWidth / 2 - pad, labelY - fontSize * 0.15, textWidth + pad * 2, fontSize * 1.35, 2);
           ctx.fill();
           ctx.textAlign = "center";
           ctx.textBaseline = "top";
-          ctx.fillStyle = isCenter ? "#26418f" : n.nodeType === "Article" ? "#212121" : "#757575";
+          ctx.fillStyle = isCenter ? "#7986cb" : n.nodeType === "Article" ? (dark ? "#e0e0e0" : "#212121") : (dark ? "#9e9e9e" : "#757575");
           ctx.fillText(display, n.x!, labelY);
         }}
-        linkColor={() => "rgba(189,189,189,0.5)"}
+        linkColor={() => dark ? "rgba(120,120,140,0.4)" : "rgba(189,189,189,0.5)"}
         linkWidth={1}
         linkDirectionalArrowLength={3.5}
         linkDirectionalArrowRelPos={0.9}
         linkCurvature={0.15}
-        backgroundColor="#fafafa"
+        backgroundColor={dark ? "#121212" : "#fafafa"}
         cooldownTicks={200}
         warmupTicks={50}
         onEngineStop={() => {
@@ -351,7 +361,7 @@ function InteractiveGraph({
         }}
       />
       <Box sx={{ display: "flex", gap: 2, mt: 1, justifyContent: "center", alignItems: "center" }}>
-        {Object.entries(NODE_COLORS).map(([label, color]) => (
+        {Object.entries(nodeColors).map(([label, color]) => (
           <Box key={label} sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
             <Box sx={{ width: 12, height: 12, borderRadius: "50%", bgcolor: color }} />
             <Typography variant="caption" color="text.secondary">{label}</Typography>

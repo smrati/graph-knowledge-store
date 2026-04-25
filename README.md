@@ -18,7 +18,7 @@ A personal knowledge base web application. Write markdown articles, automaticall
 cp .env.example .env
 ```
 
-Edit `.env` if needed. Defaults assume Ollama on `localhost:11434` with models `gemma2:9b-instruct-q4_K_M` (chat) and `qwen3-embedding:0.6b` (embeddings).
+Edit `.env` if needed. Defaults assume Ollama on `localhost:11434` with models `gemma4:e4b-it-q8_0` (chat) and `qwen3-embedding:0.6b` (embeddings).
 
 ### 2. Start databases
 
@@ -100,10 +100,15 @@ graph-knowledge-store/
 │       ├── api/                # HTTP client
 │       ├── components/         # UI components (MUI)
 │       ├── pages/              # Route pages
-│       └── theme.ts            # Material Design theme
+│       └── theme.ts            # Material Design theme (light + dark)
+├── scripts/                    # Backup, restore, rebuild utilities
+│   ├── backup.sh               # Postgres backup with compression
+│   ├── restore.sh              # Interactive database restore
+│   └── rebuild_graph.py        # Rebuild Neo4j from Postgres
 ├── alembic/                    # Database migrations
 ├── docs/                       # Documentation
 ├── docker-compose.yml          # Postgres + Neo4j
+├── Makefile                    # backup, restore, rebuild-graph targets
 ├── .env.example                # Configuration template
 └── PLAN.md                     # Implementation plan
 ```
@@ -123,6 +128,7 @@ graph-knowledge-store/
 | `GET` | `/api/graph/article/{id}/neighbors` | Related articles via graph |
 | `GET` | `/api/graph/article/{id}/subgraph` | Subgraph for visualization |
 | `GET` | `/api/graph/stats` | Graph statistics |
+| `POST` | `/api/quiz/generate` | Generate quiz from filtered articles |
 | `GET` | `/api/health` | Health check |
 
 ## Features
@@ -135,7 +141,13 @@ graph-knowledge-store/
 - **Knowledge graph** — interactive force-directed visualization with zoom, pan, and drag
 - **Clickable topics/keywords** — filter articles by clicking topic or keyword chips
 - **Related articles** — graph-based related article suggestions
-- **Material Design UI** — MUI component library with consistent theme
+- **Material Design UI** — MUI component library with light/dark mode toggle
+- **Quiz system** — AI-generated quizzes (MCQ, short answer, flashcards) for active recall
+- **Collapsible sidebar** — expand/collapse with state persisted in localStorage
+- **Pagination** — user-controllable page size (10–100) across all article lists
+- **Copy code** — one-click copy button on fenced code blocks in rendered markdown
+- **Scroll buttons** — floating button to scroll to top/bottom of any page
+- **Backup & restore** — shell scripts for Postgres backup with auto-cleanup
 
 ## Documentation
 
@@ -145,3 +157,12 @@ graph-knowledge-store/
 - [API Reference](docs/api-reference.md)
 - [Configuration Guide](docs/configuration.md)
 - [Development Guide](docs/development.md)
+
+## Backup & Restore
+
+```bash
+make backup              # Create timestamped backup (keeps last 10)
+make list-backups        # Show available backups
+make restore             # Restore interactively (shows menu)
+make rebuild-graph       # Rebuild Neo4j from Postgres after restore
+```

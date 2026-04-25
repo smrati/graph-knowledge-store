@@ -14,6 +14,7 @@ All phases are **complete**.
 | Phase 2 | LLM Enrichment (topic/keyword/entity extraction, summary) | Done |
 | Phase 3 | Graph Layer (Neo4j, graph visualization, related articles) | Done |
 | Phase 4 | Polish (hybrid search, MUI Material Design, type-ahead, interactive graph) | Done |
+| Phase 5 | UX & Features (dark mode, pagination, quiz, backup/restore) | Done |
 
 ---
 
@@ -24,7 +25,7 @@ All config via `.env` loaded through `pydantic-settings`. Switch LLM provider by
 ```env
 LLM_BASE_URL=http://localhost:11434/v1
 LLM_API_KEY=ollama
-LLM_CHAT_MODEL=gemma2:9b-instruct-q4_K_M
+LLM_CHAT_MODEL=gemma4:e4b-it-q8_0
 LLM_EMBEDDING_MODEL=qwen3-embedding:0.6b
 LLM_EMBEDDING_DIMENSIONS=1024
 
@@ -46,6 +47,7 @@ NEO4J_PASSWORD=password123
 ```
 graph-knowledge-store/
 ├── docker-compose.yml
+├── Makefile
 ├── .env.example
 ├── pyproject.toml
 ├── alembic.ini
@@ -64,13 +66,15 @@ graph-knowledge-store/
 │   ├── schemas/
 │   │   ├── __init__.py
 │   │   ├── article.py
+│   │   ├── quiz.py
 │   │   └── graph.py
 │   ├── api/
 │   │   ├── __init__.py
 │   │   ├── router.py
 │   │   ├── articles.py
 │   │   ├── search.py
-│   │   └── graph.py
+│   │   ├── graph.py
+│   │   └── quiz.py
 │   ├── services/
 │   │   ├── __init__.py
 │   │   ├── article_service.py
@@ -78,10 +82,15 @@ graph-knowledge-store/
 │   │   ├── llm_service.py
 │   │   ├── extraction_service.py
 │   │   ├── graph_service.py
-│   │   └── search_service.py
+│   │   ├── search_service.py
+│   │   └── quiz_service.py
 │   └── graph/
 │       ├── __init__.py
 │       └── neo4j_client.py
+├── scripts/
+│   ├── backup.sh
+│   ├── restore.sh
+│   └── rebuild_graph.py
 ├── frontend/
 │   ├── package.json
 │   ├── vite.config.ts
@@ -100,13 +109,17 @@ graph-knowledge-store/
 │       │   ├── ArticleEditor.tsx
 │       │   ├── ArticleView.tsx
 │       │   ├── MarkdownPreview.tsx
-│       │   └── RelatedArticles.tsx
+│       │   ├── RelatedArticles.tsx
+│       │   ├── PaginationControls.tsx
+│       │   ├── QuizRunner.tsx
+│       │   └── ScrollButtons.tsx
 │       └── pages/
 │           ├── HomePage.tsx
 │           ├── EditorPage.tsx
 │           ├── ArticlePage.tsx
 │           ├── SearchPage.tsx
-│           └── GraphPage.tsx
+│           ├── GraphPage.tsx
+│           └── QuizPage.tsx
 └── docs/
     ├── architecture.md
     ├── api-reference.md
@@ -176,8 +189,8 @@ CREATE CONSTRAINT FOR (k:Keyword) REQUIRE k.name IS UNIQUE;
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/api/articles` | Create article (title auto-generated if omitted, optional `fix_equations`) |
-| `GET` | `/api/articles` | List articles (paginated, filterable by `?topic=` or `?keyword=`) |
-| `GET` | `/api/articles/index` | Lightweight index for client-side search |
+| `GET` | `/api/articles` | List articles (paginated `?page=&limit=`, filterable by `?topic=` or `?keyword=`) |
+| `GET` | `/api/articles/index` | Lightweight index (id, title, summary, topics, keywords) for client-side search |
 | `GET` | `/api/articles/{id}` | Get article with metadata |
 | `PUT` | `/api/articles/{id}` | Update article (re-enriches if content changed) |
 | `DELETE` | `/api/articles/{id}` | Delete article + embeddings + graph nodes |
@@ -197,6 +210,12 @@ CREATE CONSTRAINT FOR (k:Keyword) REQUIRE k.name IS UNIQUE;
 | `GET` | `/api/graph/article/{id}/neighbors` | Related articles via graph traversal |
 | `GET` | `/api/graph/article/{id}/subgraph?depth=2` | Subgraph for visualization |
 | `GET` | `/api/graph/stats` | Node/relationship counts |
+
+### Quiz
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/quiz/generate` | Generate quiz from articles matching selected topics/keywords |
 
 ---
 
@@ -231,3 +250,10 @@ CREATE CONSTRAINT FOR (k:Keyword) REQUIRE k.name IS UNIQUE;
 - **Clickable topic/keyword chips** — filter articles by clicking chips on article detail or card
 - **Material Design UI** — MUI components, theme, snackbar notifications, confirmation dialogs
 - **Full network view** — entire graph renders on page load, click article node to zoom into subgraph
+- **Dark mode** — light/dark theme toggle in sidebar, persisted in localStorage, respects OS preference
+- **Collapsible sidebar** — expand/collapse with localStorage persistence
+- **Pagination** — user-controllable page size (10–100) on HomePage and SearchPage
+- **Copy code button** — one-click copy on fenced code blocks in rendered markdown
+- **Scroll to top/bottom** — floating FAB button adapts based on scroll position
+- **Quiz system** — MCQ, short answer, and flashcard quizzes generated by LLM from filtered articles
+- **Backup & restore** — `make backup` / `make restore` with auto-cleanup, Neo4j rebuildable via `make rebuild-graph`

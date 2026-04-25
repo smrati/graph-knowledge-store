@@ -51,8 +51,8 @@ Open http://localhost:5173.
 - `app/graph/` — Neo4j-specific client code
 
 **Naming:**
-- API files match their resource: `articles.py`, `search.py`, `graph.py`
-- Service files match their domain: `article_service.py`, `embedding_service.py`
+- API files match their resource: `articles.py`, `search.py`, `graph.py`, `quiz.py`
+- Service files match their domain: `article_service.py`, `embedding_service.py`, `quiz_service.py`
 - ORM models use singular class names: `Article`, `ArticleEmbedding`
 - Pydantic schemas use verb suffixes: `ArticleCreate`, `ArticleUpdate`, `ArticleResponse`
 
@@ -60,6 +60,7 @@ Open http://localhost:5173.
 - Postgres operations use `asyncpg` via SQLAlchemy async
 - Neo4j operations are synchronous (Neo4j Python driver limitation)
 - All Neo4j calls from async handlers run in `ThreadPoolExecutor`
+- Quiz generation (LLM calls) also runs in `ThreadPoolExecutor`
 - Background tasks use FastAPI's `BackgroundTasks`, not Celery
 - Background tasks that need a database session create their own via `async_session_factory()`
 
@@ -75,7 +76,7 @@ Open http://localhost:5173.
 - `src/api/` — HTTP client and TypeScript interfaces
 - `src/components/` — reusable UI components
 - `src/pages/` — top-level route components
-- `src/theme.ts` — MUI Material Design theme
+- `src/theme.ts` — MUI Material Design theme (light + dark)
 
 **Conventions:**
 - One component per file, default export
@@ -85,11 +86,30 @@ Open http://localhost:5173.
 - Route definitions centralized in `App.tsx`
 - All API calls go through the centralized `api` client in `src/api/client.ts`
 - Snackbar notifications via `notistack` for user feedback
+- Dark mode context via `useThemeMode()` from `MaterialThemeProvider`
 
 **Material Design theme:**
-- Theme defined in `src/theme.ts` with indigo primary, teal secondary
-- `MaterialThemeProvider` wraps the app with `ThemeProvider`, `CssBaseline`, and `SnackbarProvider`
-- Sidebar navigation uses MUI `Drawer` with `ListItemButton` (active state highlighted)
+- Dual themes in `src/theme.ts` — light (indigo/teal) and dark (lighter variants with enhanced contrast)
+- `MaterialThemeProvider` wraps the app with `ThemeProvider`, `CssBaseline`, `SnackbarProvider`, and dark mode context
+- Sidebar navigation uses MUI `Drawer` (collapsible) with `ListItemButton` (active state highlighted)
+- Dark mode toggled via icon button in sidebar, persisted in localStorage
+
+**Dark mode implementation:**
+- `useThemeMode()` hook returns `{ dark, toggleTheme }`
+- `document.documentElement.classList.toggle("dark-mode", dark)` for CSS-based dark overrides
+- MUI components auto-adapt via theme palette
+- Custom CSS uses `.dark-mode` class prefix for non-MUI elements (inline code, markdown preview, code blocks)
+- Graph visualization uses lighter node colors and adjusted label backgrounds in dark mode
+
+**Pagination:**
+- `PaginationControls` component: page size dropdown (10/25/50/100), range display, MUI Pagination
+- Backend enforces `limit` ge=10, le=100
+- Default page size: 10
+
+**Quiz:**
+- `QuizPage` — multi-select topics/keywords with fuse.js type-ahead, quiz type picker, question count slider
+- `QuizRunner` — handles MCQ (click options, green/red feedback), Short Answer (text input, model answer, self-score), Flashcard (flip card, Got It/Missed It)
+- `ChipInput` — reusable multi-select with fuse.js type-ahead, selected items as dismissible chips
 
 ## Database Migrations
 
@@ -129,6 +149,19 @@ Example: adding a "tags" feature to articles.
 5. **API** — Update endpoint if the API contract changes
 6. **Frontend** — Update TypeScript interfaces in `src/api/client.ts`, then update components
 
+## Backup & Restore
+
+```bash
+make backup              # Create timestamped backup (auto-cleanup, keeps last 10)
+make list-backups        # Show available backups
+make restore             # Restore interactively (picks from menu)
+make rebuild-graph       # Rebuild Neo4j + embeddings from Postgres
+make rebuild-graph-only  # Rebuild Neo4j only
+make rebuild-embeddings  # Rebuild embeddings only
+```
+
+Backups contain Postgres dump + `.env` config. Neo4j is not backed up (fully rebuildable).
+
 ## Running Tests
 
 Tests are not yet implemented. When adding tests:
@@ -167,6 +200,12 @@ uv run alembic downgrade -1           # Rollback last migration
 # Neo4j browser
 # Open http://localhost:7474
 # Connect with neo4j/password123
+
+# Backup & Restore
+make backup                          # Create backup
+make list-backups                    # List available backups
+make restore                         # Restore from backup
+make rebuild-graph                   # Rebuild Neo4j from Postgres
 ```
 
 ## Troubleshooting
@@ -190,8 +229,8 @@ The migration file needs `import pgvector.sqlalchemy.vector` at the top. Auto-ge
 ### Ollama not responding
 ```bash
 ollama list                          # Check available models
-ollama pull gemma2:9b-instruct-q4_K_M   # Pull chat model
-ollama pull qwen3-embedding:0.6b        # Pull embedding model
+ollama pull gemma4:e4b-it-q8_0       # Pull chat model
+ollama pull qwen3-embedding:0.6b     # Pull embedding model
 ```
 
 ### Frontend proxy not working
@@ -199,3 +238,9 @@ Verify `vite.config.ts` has the proxy config pointing to `http://localhost:8000`
 
 ### Neo4j graph not showing data
 Articles must be enriched first (enrichment_status = "completed") before graph nodes appear. If Neo4j was down during enrichment, re-save the article to trigger re-enrichment.
+
+### Quiz generation returns 500
+The LLM may have returned invalid JSON. Check backend logs for the raw LLM output. Try with fewer questions or a different chat model. The quiz service logs the first 500 chars of unparseable output.
+
+### Dark mode text hard to read
+The dark theme uses enhanced contrast colors (`#eceff1` primary, `#b0bec5` secondary). If custom components have hardcoded colors, use MUI theme colors (`color="text.secondary"`) or add `.dark-mode` CSS overrides in `index.css`.

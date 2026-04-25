@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Fuse from "fuse.js";
 import { api, type ArticleIndexItem, type SearchResult } from "../api/client";
+import PaginationControls from "../components/PaginationControls";
 import Typography from "@mui/material/Typography";
 import TextField from "@mui/material/TextField";
 import InputAdornment from "@mui/material/InputAdornment";
@@ -19,14 +20,18 @@ import CircularProgress from "@mui/material/CircularProgress";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import BoltOutlinedIcon from "@mui/icons-material/BoltOutlined";
 
+const DEFAULT_PAGE_SIZE = 10;
+
 export default function SearchPage() {
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<"semantic" | "hybrid">("semantic");
   const [suggestions, setSuggestions] = useState<ArticleIndexItem[]>([]);
-  const [semanticResults, setSemanticResults] = useState<SearchResult[]>([]);
+  const [allResults, setAllResults] = useState<SearchResult[]>([]);
   const [indexLoading, setIndexLoading] = useState(true);
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [fuse, setFuse] = useState<InstanceType<typeof Fuse<ArticleIndexItem>> | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const navigate = useNavigate();
@@ -52,7 +57,7 @@ export default function SearchPage() {
   function handleInputChange(value: string) {
     setQuery(value);
     setSearched(false);
-    setSemanticResults([]);
+    setAllResults([]);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (!fuse || value.trim().length < 2) {
       setSuggestions([]);
@@ -69,16 +74,25 @@ export default function SearchPage() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setSuggestions([]);
     setSearching(true);
+    setPage(1);
     try {
-      const res = await api.search(query, 10, mode);
-      setSemanticResults(res.results);
+      const res = await api.search(query, 100, mode);
+      setAllResults(res.results);
     } catch {
-      setSemanticResults([]);
+      setAllResults([]);
     } finally {
       setSearching(false);
       setSearched(true);
     }
   }
+
+  useEffect(() => {
+    setPage(1);
+  }, [pageSize]);
+
+  const total = allResults.length;
+  const offset = (page - 1) * pageSize;
+  const pagedResults = allResults.slice(offset, offset + pageSize);
 
   return (
     <Box sx={{ maxWidth: 720 }}>
@@ -164,11 +178,11 @@ export default function SearchPage() {
         </Box>
       )}
 
-      {searched && semanticResults.length === 0 && !searching && (
+      {searched && allResults.length === 0 && !searching && (
         <Typography color="text.secondary">No semantic results found.</Typography>
       )}
 
-      {semanticResults.length > 0 && (
+      {pagedResults.length > 0 && (
         <Box>
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 1 }}>
             <SearchOutlinedIcon sx={{ fontSize: 14 }} color="primary" />
@@ -177,7 +191,7 @@ export default function SearchPage() {
             </Typography>
           </Box>
           <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            {semanticResults.map((r) => (
+            {pagedResults.map((r) => (
               <Card key={r.article.id} variant="outlined" sx={{ transition: "box-shadow 0.2s", "&:hover": { boxShadow: 2 } }}>
                 <CardActionArea onClick={() => navigate("/article/" + r.article.id)}>
                   <CardContent>
@@ -206,6 +220,14 @@ export default function SearchPage() {
               </Card>
             ))}
           </Box>
+
+          <PaginationControls
+            total={total}
+            page={page}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+          />
         </Box>
       )}
     </Box>

@@ -32,6 +32,13 @@ WHERE EXISTS (
 );
 ```
 
+The quiz service uses OR logic to match multiple topics/keywords:
+
+```sql
+-- Quiz: match ANY topic or keyword
+WHERE EXISTS (...topic_0...) OR EXISTS (...topic_1...) OR EXISTS (...kw_0...)
+```
+
 ### `article_embeddings` table
 
 | Column | Type | Nullable | Default | Description |
@@ -115,3 +122,20 @@ This shared-node pattern is what powers the graph-based related articles feature
 - On article update, old relationships are deleted before creating new ones
 - On article delete, `DETACH DELETE` removes the Article node and all its relationships
 - Topic/Keyword/Entity nodes persist even if only one article references them (they become orphans but don't cause issues)
+- Neo4j is fully rebuildable from Postgres via `scripts/rebuild_graph.py`
+
+## Backup & Restore
+
+Postgres is the primary backup target. Neo4j is not backed up because it is fully rebuildable.
+
+```bash
+make backup         # pg_dump + .env → backups/backup_YYYYMMDD_HHMMSS.tar.gz
+make restore        # Interactive restore from backup file
+make rebuild-graph  # Rebuild Neo4j from Postgres (re-runs enrichment pipeline)
+```
+
+The backup includes:
+- `postgres_backup.sql` — full database dump (articles, embeddings, all data)
+- `env_backup` — copy of `.env` configuration
+
+Backups are compressed and auto-cleaned (last 10 retained). See `scripts/backup.sh` and `scripts/restore.sh`.

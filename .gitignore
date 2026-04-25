@@ -19,3 +19,6 @@ frontend/dist/
 # IDE
 .vscode/
 .idea/
+
+# Backups
+backups/

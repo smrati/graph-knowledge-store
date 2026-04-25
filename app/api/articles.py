@@ -27,7 +27,7 @@ async def create_article(
 @router.get("", response_model=ArticleListResponse)
 async def list_articles(
     page: int = Query(1, ge=1),
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(10, ge=10, le=100),
     topic: str | None = Query(None),
     keyword: str | None = Query(None),
     session: AsyncSession = Depends(get_session),

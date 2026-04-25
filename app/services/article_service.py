@@ -83,12 +83,12 @@ async def get_articles_index(session: AsyncSession) -> ArticleIndexResponse:
     from app.schemas.article import ArticleIndexItem
 
     result = await session.execute(
-        select(Article.id, Article.title, Article.summary, Article.keywords)
+        select(Article.id, Article.title, Article.summary, Article.topics, Article.keywords)
         .order_by(Article.updated_at.desc())
     )
     rows = result.all()
     articles = [
-        ArticleIndexItem(id=r[0], title=r[1], summary=r[2], keywords=r[3] or [])
+        ArticleIndexItem(id=r[0], title=r[1], summary=r[2], topics=r[3] or [], keywords=r[4] or [])
         for r in rows
     ]
     return ArticleIndexResponse(articles=articles)

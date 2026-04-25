@@ -34,6 +34,7 @@ export interface ArticleIndexItem {
   id: string;
   title: string;
   summary: string | null;
+  topics: string[];
   keywords: string[];
 }
 
@@ -80,6 +81,40 @@ export interface GraphStats {
   entities: number;
 }
 
+export type QuizType = "mcq" | "short_answer" | "flashcard";
+
+export interface McqOption {
+  label: string;
+  text: string;
+}
+
+export interface McqQuestion {
+  question: string;
+  options: McqOption[];
+  correct_index: number;
+  explanation: string;
+}
+
+export interface ShortAnswerQuestion {
+  question: string;
+  model_answer: string;
+  key_points: string[];
+}
+
+export interface FlashcardItem {
+  front: string;
+  back: string;
+  hint: string;
+}
+
+export interface QuizResponse {
+  quiz_type: QuizType;
+  topics: string[];
+  keywords: string[];
+  article_count: number;
+  questions: McqQuestion[] | ShortAnswerQuestion[] | FlashcardItem[];
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: { "Content-Type": "application/json" },
@@ -94,7 +129,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  listArticles: (page = 1, limit = 20, filters?: { topic?: string; keyword?: string }) => {
+  listArticles: (page = 1, limit = 10, filters?: { topic?: string; keyword?: string }) => {
     let path = `/articles?page=${page}&limit=${limit}`;
     if (filters?.topic) path += `&topic=${encodeURIComponent(filters.topic)}`;
     if (filters?.keyword) path += `&keyword=${encodeURIComponent(filters.keyword)}`;
@@ -128,4 +163,7 @@ export const api = {
     request<{ article_id: string; neighbors: GraphNeighbor[] }>(`/graph/article/${articleId}/neighbors?limit=${limit}`),
 
   getGraphStats: () => request<GraphStats>("/graph/stats"),
+
+  generateQuiz: (data: { topics?: string[]; keywords?: string[]; quiz_type: QuizType; num_questions: number }) =>
+    request<QuizResponse>("/quiz/generate", { method: "POST", body: JSON.stringify(data) }),
 };

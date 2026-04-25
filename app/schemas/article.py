@@ -54,6 +54,7 @@ class ArticleIndexItem(BaseModel):
     id: uuid.UUID
     title: str
     summary: str | None = None
+    topics: list = Field(default_factory=list)
     keywords: list = Field(default_factory=list)
 
     model_config = {"from_attributes": True}

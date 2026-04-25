@@ -86,10 +86,11 @@ def get_article_neighbors(article_id: uuid.UUID, limit: int = 10) -> list[dict]:
             """
             MATCH (a:Article {id: $id})-[:HAS_TOPIC|HAS_KEYWORD|MENTIONS_ENTITY]->(n)<-[:HAS_TOPIC|HAS_KEYWORD|MENTIONS_ENTITY]-(other:Article)
             WHERE other <> a
-            WITH other, count(n) AS shared_nodes, labels(n) AS node_labels
+            WITH other, count(DISTINCT n) AS shared_nodes,
+                 collect(DISTINCT [label IN labels(n) WHERE label IN ['Topic', 'Keyword', 'Entity']][0])[0] AS connection_type
             RETURN other.id AS id, other.title AS title,
                    shared_nodes,
-                   [label IN node_labels WHERE label IN ['Topic', 'Keyword', 'Entity']][0] AS connection_type
+                   connection_type
             ORDER BY shared_nodes DESC
             LIMIT $limit
             """,

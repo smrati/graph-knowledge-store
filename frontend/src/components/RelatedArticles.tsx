@@ -25,7 +25,15 @@ export default function RelatedArticles({ articleId }: { articleId: string }) {
 
   useEffect(() => {
     api.getNeighbors(articleId, 5)
-      .then((data) => setNeighbors(data.neighbors || []))
+      .then((data) => {
+        const seen = new Set<string>();
+        const unique = (data.neighbors || []).filter((n: Neighbor) => {
+          if (seen.has(n.id)) return false;
+          seen.add(n.id);
+          return true;
+        });
+        setNeighbors(unique);
+      })
       .catch(() => setNeighbors([]))
       .finally(() => setLoading(false));
   }, [articleId]);

@@ -19,7 +19,7 @@ These control which LLM provider and models the application uses.
 |----------|---------|-------------|
 | `LLM_BASE_URL` | `http://localhost:11434/v1` | OpenAI-compatible API base URL |
 | `LLM_API_KEY` | `ollama` | API key (unused by Ollama, required by OpenAI) |
-| `LLM_CHAT_MODEL` | `gemma2:9b-instruct-q4_K_M` | Model for chat completions (metadata extraction, title generation, equation normalization) |
+| `LLM_CHAT_MODEL` | `gemma4:e4b-it-q8_0` | Model for chat completions (metadata extraction, title generation, equation normalization, quiz generation) |
 | `LLM_EMBEDDING_MODEL` | `qwen3-embedding:0.6b` | Model for text embeddings |
 | `LLM_EMBEDDING_DIMENSIONS` | `1024` | Vector dimension of the embedding model output |
 
@@ -48,7 +48,7 @@ These control which LLM provider and models the application uses.
 ```env
 LLM_BASE_URL=http://localhost:11434/v1
 LLM_API_KEY=ollama
-LLM_CHAT_MODEL=gemma2:9b-instruct-q4_K_M
+LLM_CHAT_MODEL=gemma4:e4b-it-q8_0
 LLM_EMBEDDING_MODEL=qwen3-embedding:0.6b
 LLM_EMBEDDING_DIMENSIONS=1024
 ```
@@ -78,10 +78,7 @@ LLM_EMBEDDING_DIMENSIONS=1024
 **Important:** If you change `LLM_EMBEDDING_MODEL` or `LLM_EMBEDDING_DIMENSIONS`, you must re-embed all existing articles. The vector dimension is baked into the database schema. Run:
 
 ```bash
-# Drop and recreate embeddings table, then re-embed
-uv run alembic downgrade base
-uv run alembic upgrade head
-# Then trigger re-enrichment for each article via PUT /api/articles/{id}
+make rebuild-embeddings
 ```
 
 ## How Configuration Works
@@ -128,3 +125,16 @@ services:
 ```
 
 If you change credentials in `.env`, update `docker-compose.yml` to match (or vice versa).
+
+## Frontend Theme Configuration
+
+The frontend theme is defined in `frontend/src/theme.ts` with both light and dark mode variants. User preference is stored in `localStorage("knowledge-store-theme")` and defaults to the OS `prefers-color-scheme`.
+
+**Customizing the theme:** Edit `frontend/src/theme.ts` — the `lightTheme` and `darkTheme` objects. Key palette values:
+
+| Property | Light | Dark |
+|----------|-------|------|
+| `primary.main` | `#5c6bc0` (indigo) | `#7986cb` (lighter indigo) |
+| `secondary.main` | `#26a69a` (teal) | `#4db6ac` (lighter teal) |
+| `background.default` | `#f5f5f5` | `#121212` |
+| `background.paper` | `#ffffff` | `#1e1e1e` |

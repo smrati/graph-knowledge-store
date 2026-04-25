@@ -27,7 +27,7 @@ def _format_result(r: dict) -> dict:
 @router.get("", response_model=SearchResponse)
 async def search(
     q: str = Query(..., min_length=1),
-    limit: int = Query(10, ge=1, le=50),
+    limit: int = Query(10, ge=1, le=100),
     mode: str = Query("semantic", pattern="^(semantic|hybrid)$"),
     alpha: float = Query(0.5, ge=0.0, le=1.0),
     session: AsyncSession = Depends(get_session),

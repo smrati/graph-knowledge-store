@@ -1,35 +1,39 @@
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { api, type ArticleListItem } from "../api/client";
 import ArticleCard from "../components/ArticleCard";
+import PaginationControls from "../components/PaginationControls";
 import Typography from "@mui/material/Typography";
-import Pagination from "@mui/material/Pagination";
 import Chip from "@mui/material/Chip";
+import Button from "@mui/material/Button";
 import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
+import QuizOutlinedIcon from "@mui/icons-material/QuizOutlined";
+
+const DEFAULT_PAGE_SIZE = 10;
 
 export default function HomePage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const topic = searchParams.get("topic") || undefined;
   const keyword = searchParams.get("keyword") || undefined;
 
   const [articles, setArticles] = useState<ArticleListItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
 
   useEffect(() => {
     setPage(1);
-  }, [topic, keyword]);
+  }, [topic, keyword, pageSize]);
 
   useEffect(() => {
-    api.listArticles(page, 20, { topic, keyword }).then((res) => {
+    api.listArticles(page, pageSize, { topic, keyword }).then((res) => {
       setArticles(res.articles);
       setTotal(res.total);
     });
-  }, [page, topic, keyword]);
-
-  const totalPages = Math.ceil(total / 20);
+  }, [page, pageSize, topic, keyword]);
 
   function clearFilter() {
     setSearchParams({});
@@ -56,6 +60,15 @@ export default function HomePage() {
             size="small"
             onDelete={clearFilter}
           />
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<QuizOutlinedIcon />}
+            onClick={() => navigate(`/quiz?${topic ? `topics=${encodeURIComponent(topic)}` : `keywords=${encodeURIComponent(keyword!)}`}`)}
+            sx={{ ml: 0.5 }}
+          >
+            Take Quiz
+          </Button>
           <IconButton size="small" onClick={clearFilter}>
             <CloseOutlinedIcon fontSize="small" />
           </IconButton>
@@ -73,17 +86,14 @@ export default function HomePage() {
           ))}
         </Box>
       )}
-      {totalPages > 1 && (
-        <Box sx={{ display: "flex", justifyContent: "center", mt: 3 }}>
-          <Pagination
-            count={totalPages}
-            page={page}
-            onChange={(_, p) => setPage(p)}
-            color="primary"
-            shape="rounded"
-          />
-        </Box>
-      )}
+
+      <PaginationControls
+        total={total}
+        page={page}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
+      />
     </Box>
   );
 }
