@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     llm_chat_model: str = "gemma2:9b-instruct-q4_K_M"
     llm_embedding_model: str = "qwen3-embedding:0.6b"
     llm_embedding_dimensions: int = 1024
+    llm_embedding_base_url: str = ""
+    llm_embedding_api_key: str = ""
 
     postgres_host: str = "localhost"
     postgres_port: int = 5432

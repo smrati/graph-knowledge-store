@@ -89,12 +89,17 @@ docker volume rm graph-knowledge-store_postgres_data 2>/dev/null || true
 docker compose -f "$PROJECT_DIR/docker-compose.yml" up -d postgres
 
 echo "  -> Waiting for Postgres to be ready..."
+PG_READY=false
 for i in $(seq 1 30); do
     if docker exec "$(docker ps --filter "ancestor=postgres:16.9-with-vector" --format '{{.Names}}' | head -1)" pg_isready -U "$PG_USER" &>/dev/null; then
+        PG_READY=true
         break
     fi
     sleep 1
 done
+if [ "$PG_READY" = true ]; then
+    sleep 3
+fi
 
 PG_CONTAINER=$(docker ps --filter "ancestor=postgres:16.9-with-vector" --format '{{.Names}}' | head -1)
 if [ -z "$PG_CONTAINER" ]; then
@@ -104,7 +109,8 @@ if [ -z "$PG_CONTAINER" ]; then
 fi
 
 echo "[4/6] Restoring database..."
-docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" < "$WORK_DIR/postgres_backup.sql"
+docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -c "CREATE EXTENSION IF NOT EXISTS vector;" >/dev/null
+grep -v 'DROP EXTENSION' "$WORK_DIR/postgres_backup.sql" | docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB"
 echo "  -> Database restored"
 
 echo "[5/6] Running Alembic migrations..."

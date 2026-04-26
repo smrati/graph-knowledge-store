@@ -255,7 +255,7 @@ make restore
 2. User confirms restore
 3. docker compose down + delete Postgres volume
 4. docker compose up -d (fresh Postgres)
-5. Restore SQL dump into new database
+5. Create pgvector extension, filter DROP EXTENSION, restore SQL dump
 6. Run alembic upgrade head
 7. Print: "Run make rebuild-graph to rebuild Neo4j"
 ```

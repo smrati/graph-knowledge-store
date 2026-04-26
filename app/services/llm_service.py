@@ -7,6 +7,12 @@ def get_client() -> OpenAI:
     return OpenAI(base_url=settings.llm_base_url, api_key=settings.llm_api_key)
 
 
+def get_embedding_client() -> OpenAI:
+    base_url = settings.llm_embedding_base_url or settings.llm_base_url
+    api_key = settings.llm_embedding_api_key or settings.llm_api_key
+    return OpenAI(base_url=base_url, api_key=api_key)
+
+
 def chat(prompt: str, system: str = "You are a helpful assistant.", num_ctx: int | None = None) -> str:
     client = get_client()
     kwargs: dict = dict(
@@ -78,7 +84,7 @@ def normalize_markdown_equations(content: str) -> str:
 
 
 def embed(texts: list[str]) -> list[list[float]]:
-    client = get_client()
+    client = get_embedding_client()
     response = client.embeddings.create(
         model=settings.llm_embedding_model,
         input=texts,

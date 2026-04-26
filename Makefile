@@ -10,13 +10,13 @@ restore-%:
 	@bash scripts/restore.sh backups/backup_$*.tar.gz
 
 rebuild-graph:
-	@python scripts/rebuild_graph.py
+	@cd $(CURDIR) && PYTHONPATH=. uv run python scripts/rebuild_graph.py
 
 rebuild-graph-only:
-	@python scripts/rebuild_graph.py --graph-only
+	@cd $(CURDIR) && PYTHONPATH=. uv run python scripts/rebuild_graph.py --graph-only
 
 rebuild-embeddings:
-	@python scripts/rebuild_graph.py --embeddings-only
+	@cd $(CURDIR) && PYTHONPATH=. uv run python scripts/rebuild_graph.py --embeddings-only
 
 list-backups:
 	@echo "Available backups:"

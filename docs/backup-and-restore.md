@@ -114,7 +114,7 @@ The restore script (`scripts/restore.sh`) performs six steps:
 1. **Extracts the tarball** — validates that `postgres_backup.sql` exists inside.
 2. **Restores `.env`** — if the backup included an `.env` file, it replaces the current one. Otherwise, keeps the existing config.
 3. **Resets Postgres** — stops all containers, deletes the Postgres data volume, starts a fresh Postgres container, and waits for it to be ready (up to 30 seconds).
-4. **Loads the SQL dump** — pipes `postgres_backup.sql` into `psql` to recreate all tables and data.
+4. **Loads the SQL dump** — creates the pgvector extension, filters out `DROP EXTENSION` statements (to avoid connection crashes), and pipes the SQL into `psql` to recreate all tables and data.
 5. **Runs Alembic migrations** — applies any new migrations that may have been added since the backup was taken, bringing the schema to the latest version.
 6. **Starts all services** — brings Neo4j and any other containers back online.
 

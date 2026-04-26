@@ -22,6 +22,8 @@ These control which LLM provider and models the application uses.
 | `LLM_CHAT_MODEL` | `gemma4:e4b-it-q8_0` | Model for chat completions (metadata extraction, title generation, equation normalization, quiz generation) |
 | `LLM_EMBEDDING_MODEL` | `qwen3-embedding:0.6b` | Model for text embeddings |
 | `LLM_EMBEDDING_DIMENSIONS` | `1024` | Vector dimension of the embedding model output |
+| `LLM_EMBEDDING_BASE_URL` | *(empty, falls back to `LLM_BASE_URL`)* | Base URL for the embedding API endpoint |
+| `LLM_EMBEDDING_API_KEY` | *(empty, falls back to `LLM_API_KEY`)* | API key for the embedding API endpoint |
 
 ### Postgres Configuration
 
@@ -81,6 +83,36 @@ LLM_EMBEDDING_DIMENSIONS=1024
 make rebuild-embeddings
 ```
 
+### Splitting Chat and Embedding Servers
+
+If your chat model and embedding model run on different servers, set the optional `LLM_EMBEDDING_*` variables. When omitted, they fall back to `LLM_BASE_URL` and `LLM_API_KEY`.
+
+**Example — Ollama for chat, OpenAI for embeddings:**
+
+```env
+LLM_BASE_URL=http://localhost:11434/v1
+LLM_API_KEY=ollama
+LLM_CHAT_MODEL=gemma4:e2b
+
+LLM_EMBEDDING_BASE_URL=https://api.openai.com/v1
+LLM_EMBEDDING_API_KEY=sk-your-key-here
+LLM_EMBEDDING_MODEL=text-embedding-3-small
+LLM_EMBEDDING_DIMENSIONS=1536
+```
+
+**Example — Two separate Ollama instances:**
+
+```env
+LLM_BASE_URL=http://gpu-server:11434/v1
+LLM_API_KEY=ollama
+LLM_CHAT_MODEL=gemma4:e2b
+
+LLM_EMBEDDING_BASE_URL=http://embedding-server:11434/v1
+LLM_EMBEDDING_API_KEY=ollama
+LLM_EMBEDDING_MODEL=qwen3-embedding:0.6b
+LLM_EMBEDDING_DIMENSIONS=1024
+```
+
 ## How Configuration Works
 
 The `app/config.py` module defines a `Settings` class:
@@ -98,15 +130,18 @@ class Settings(BaseSettings):
 - Computed properties like `postgres_url` build connection strings from individual settings
 - The `settings` singleton is imported by other modules
 
-The LLM client (`app/services/llm_service.py`) creates an `openai.OpenAI` client with the configured `base_url` and `api_key`, so the same code works with any compatible provider.
+The LLM client (`app/services/llm_service.py`) creates an `openai.OpenAI` client with the configured `base_url` and `api_key`, so the same code works with any compatible provider. Chat and embedding models can use separate servers via `LLM_EMBEDDING_BASE_URL` and `LLM_EMBEDDING_API_KEY`.
 
 ## Docker Compose
 
-The `docker-compose.yml` defines two services. Their credentials must match your `.env`:
+The `docker-compose.yml` defines two services. The Postgres service is built from `docker/postgres.Dockerfile` (compiles pgvector from source without `-march=native` for cross-platform compatibility). Their credentials must match your `.env`:
 
 ```yaml
 services:
   postgres:
+    build:
+      context: .
+      dockerfile: docker/postgres.Dockerfile
     image: postgres:16.9-with-vector
     environment:
       POSTGRES_DB: graphknowledge    # matches POSTGRES_DB

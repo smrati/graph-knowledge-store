@@ -23,6 +23,7 @@ Edit `.env` if needed. Defaults assume Ollama on `localhost:11434` with models `
 ### 2. Start databases
 
 ```bash
+docker compose build postgres   # Build Postgres image with pgvector (once)
 docker compose up -d
 ```
 
@@ -101,6 +102,8 @@ graph-knowledge-store/
 │       ├── components/         # UI components (MUI)
 │       ├── pages/              # Route pages
 │       └── theme.ts            # Material Design theme (light + dark)
+├── docker/                       # Dockerfiles
+│   └── postgres.Dockerfile       # Postgres + pgvector (cross-platform)
 ├── scripts/                    # Backup, restore, rebuild utilities
 │   ├── backup.sh               # Postgres backup with compression
 │   ├── restore.sh              # Interactive database restore

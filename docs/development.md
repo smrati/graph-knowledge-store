@@ -19,6 +19,7 @@ cd graph-knowledge-store
 cp .env.example .env
 
 # 3. Start databases
+docker compose build postgres   # Build Postgres + pgvector image (once, per machine)
 docker compose up -d
 
 # 4. Install backend dependencies
@@ -188,6 +189,7 @@ npm run build        # Production build
 npx tsc --noEmit     # Type check only
 
 # Docker
+docker compose build postgres          # Build Postgres + pgvector image
 docker compose up -d                  # Start all services
 docker compose up -d postgres         # Start only Postgres
 docker compose down                   # Stop all services

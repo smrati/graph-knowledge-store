@@ -28,6 +28,9 @@ LLM_API_KEY=ollama
 LLM_CHAT_MODEL=gemma4:e4b-it-q8_0
 LLM_EMBEDDING_MODEL=qwen3-embedding:0.6b
 LLM_EMBEDDING_DIMENSIONS=1024
+# Optional: set if embedding model runs on a different server
+# LLM_EMBEDDING_BASE_URL=http://localhost:11434/v1
+# LLM_EMBEDDING_API_KEY=ollama
 
 POSTGRES_HOST=localhost
 POSTGRES_PORT=5432
@@ -47,6 +50,8 @@ NEO4J_PASSWORD=password123
 ```
 graph-knowledge-store/
 ├── docker-compose.yml
+├── docker/
+│   └── postgres.Dockerfile
 ├── Makefile
 ├── .env.example
 ├── pyproject.toml

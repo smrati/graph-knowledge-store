@@ -44,7 +44,7 @@ Data Layer (app/models/, app/graph/)
 
 **Service Layer** (`app/services/`)
 - `article_service.py` — CRUD operations, orchestrates enrichment pipeline, case-insensitive JSONB filtering
-- `llm_service.py` — generic LLM client (chat + embed) via OpenAI SDK, includes `generate_title()` and `normalize_markdown_equations()`
+- `llm_service.py` — generic LLM client (chat + embed) via OpenAI SDK, includes `generate_title()` and `normalize_markdown_equations()`. Supports separate endpoints for chat and embedding models via `LLM_EMBEDDING_BASE_URL` / `LLM_EMBEDDING_API_KEY`.
 - `extraction_service.py` — structured metadata extraction from article content
 - `embedding_service.py` — text chunking, embedding generation, vector similarity search
 - `graph_service.py` — Neo4j CRUD, deduplicated neighbor queries, subgraph extraction, full graph retrieval
@@ -65,7 +65,7 @@ Data Layer (app/models/, app/graph/)
 
 3. **Source of Truth**: Postgres is the authoritative data store. Neo4j holds derived data (relationships) that can be fully rebuilt from Postgres + LLM extraction via `scripts/rebuild_graph.py`.
 
-4. **OpenAI-Compatible Abstraction**: The `llm_service.py` uses the `openai` Python package with a configurable `base_url`. This means the same code works with Ollama, OpenAI, LiteLLM, or any provider that exposes an OpenAI-compatible API. Switching providers requires only `.env` changes.
+4. **OpenAI-Compatible Abstraction**: The `llm_service.py` uses the `openai` Python package with a configurable `base_url`. This means the same code works with Ollama, OpenAI, LiteLLM, or any provider that exposes an OpenAI-compatible API. Chat and embedding models can run on separate servers by setting `LLM_EMBEDDING_BASE_URL` and `LLM_EMBEDDING_API_KEY`. Switching providers requires only `.env` changes.
 
 5. **Pgvector over Dedicated Vector DB**: Using Pgvector inside Postgres avoids running a separate vector database service. For a personal knowledge base with hundreds to low thousands of articles, this is performant and operationally simpler.
 
