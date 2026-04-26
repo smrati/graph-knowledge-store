@@ -24,6 +24,8 @@ These control which LLM provider and models the application uses.
 | `LLM_EMBEDDING_DIMENSIONS` | `1024` | Vector dimension of the embedding model output |
 | `LLM_EMBEDDING_BASE_URL` | *(empty, falls back to `LLM_BASE_URL`)* | Base URL for the embedding API endpoint |
 | `LLM_EMBEDDING_API_KEY` | *(empty, falls back to `LLM_API_KEY`)* | API key for the embedding API endpoint |
+| `LLM_NUM_CTX` | `32000` | Context window size for all LLM chat calls (metadata extraction, title generation, equation normalization). Increase for long articles. |
+| `LLM_QUIZ_NUM_CTX` | `64000` | Context window size specifically for quiz generation (uses a larger default since quizzes combine multiple articles). |
 
 ### Postgres Configuration
 

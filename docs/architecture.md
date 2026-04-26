@@ -50,9 +50,10 @@ Data Layer (app/models/, app/graph/)
 - `graph_service.py` — Neo4j CRUD, deduplicated neighbor queries, subgraph extraction, full graph retrieval
 - `search_service.py` — hybrid search combining vector + graph scores
 - `quiz_service.py` — quiz generation (MCQ, short answer, flashcards) with summaries + sampling for context efficiency
+- `llm_observability.py` — sync DB logger for LLM calls; estimates tokens (~4 chars/token) when API doesn't provide usage; extracts usage with `getattr` fallbacks for Ollama compatibility
 
 **Data Layer**
-- `app/models/` — SQLAlchemy ORM models (Article, ArticleEmbedding)
+- `app/models/` — SQLAlchemy ORM models (Article, ArticleEmbedding, LLMCallLog)
 - `app/graph/neo4j_client.py` — Neo4j driver lifecycle, constraint initialization
 - `app/database.py` — async SQLAlchemy engine and session factory
 - `app/config.py` — centralized configuration via pydantic-settings
@@ -72,6 +73,8 @@ Data Layer (app/models/, app/graph/)
 6. **Equation Normalization Opt-In**: LLM-powered LaTeX delimiter fixing is controlled by a `fix_equations` flag (default false) to save compute on articles without math.
 
 7. **Quiz Context Efficiency**: Quiz generation uses summaries + metadata from all matching articles, plus full content from a sampled subset (max 6 articles). Total prompt capped at 8000 chars to avoid exhausting LLM context windows.
+
+8. **LLM Observability via Sync DB**: LLM call logging uses a synchronous SQLAlchemy session (via `psycopg2-binary` + `settings.postgres_sync_url`) rather than the async engine. This is acceptable because LLM calls already take 1-10 seconds — the one INSERT for logging is negligible. Token counts are estimated at ~4 chars/token when the API (e.g., Ollama) doesn't return usage data. Logs are kept indefinitely (no auto-cleanup).
 
 ## Frontend Architecture (React)
 
@@ -111,6 +114,7 @@ App.tsx (BrowserRouter)
         ├── GraphPage.tsx (full network + zoom-to-subgraph, dark mode aware colors)
         ├── QuizPage.tsx (multi-select topics/keywords, quiz type picker, question count slider)
         │   └── QuizRunner.tsx (MCQ / Short Answer / Flashcard modes, score card)
+        ├── LLMDashboardPage.tsx (summary cards, per-operation table, errors table, paginated call log)
         └── ScrollButtons.tsx (floating FAB — scroll to top/bottom)
 ```
 
@@ -172,4 +176,7 @@ article_service
 quiz_service
     ├── article_service (fetch filtered articles)
     └── llm_service (quiz question generation)
+
+llm_service
+    └── llm_observability (logs every LLM call — sync DB INSERT with token estimation)
 ```

@@ -101,6 +101,7 @@ graph-knowledge-store/
 │       ├── api/                # HTTP client
 │       ├── components/         # UI components (MUI)
 │       ├── pages/              # Route pages
+│       │   └── LLMDashboardPage.tsx  # LLM monitoring dashboard
 │       └── theme.ts            # Material Design theme (light + dark)
 ├── docker/                       # Dockerfiles
 │   └── postgres.Dockerfile       # Postgres + pgvector (cross-platform)
@@ -132,6 +133,8 @@ graph-knowledge-store/
 | `GET` | `/api/graph/article/{id}/subgraph` | Subgraph for visualization |
 | `GET` | `/api/graph/stats` | Graph statistics |
 | `POST` | `/api/quiz/generate` | Generate quiz from filtered articles |
+| `GET` | `/api/llm-logs/stats` | LLM call aggregate stats |
+| `GET` | `/api/llm-logs` | Paginated LLM call log |
 | `GET` | `/api/health` | Health check |
 
 ## Features
@@ -146,6 +149,7 @@ graph-knowledge-store/
 - **Related articles** — graph-based related article suggestions
 - **Material Design UI** — MUI component library with light/dark mode toggle
 - **Quiz system** — AI-generated quizzes (MCQ, short answer, flashcards) for active recall
+- **LLM observability** — dashboard monitoring all LLM calls with latency, token usage, error tracking, and per-operation breakdown
 - **Collapsible sidebar** — expand/collapse with state persisted in localStorage
 - **Pagination** — user-controllable page size (10–100) across all article lists
 - **Copy code** — one-click copy button on fenced code blocks in rendered markdown

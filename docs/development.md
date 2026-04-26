@@ -246,3 +246,9 @@ The LLM may have returned invalid JSON. Check backend logs for the raw LLM outpu
 
 ### Dark mode text hard to read
 The dark theme uses enhanced contrast colors (`#eceff1` primary, `#b0bec5` secondary). If custom components have hardcoded colors, use MUI theme colors (`color="text.secondary"`) or add `.dark-mode` CSS overrides in `index.css`.
+
+### LLM Monitor dashboard not loading data
+Verify the migration was applied (`uv run alembic upgrade head`) and the backend was restarted. Check browser console for 404 errors — the endpoints are at `/api/llm-logs/stats` and `/api/llm-logs`. Token counts may show as estimated (not exact) when using Ollama since it doesn't always return usage data.
+
+### LLM call logs showing estimated tokens
+When the LLM API doesn't return `usage` data (common with Ollama embedding endpoints), the system estimates tokens at ~4 chars/token. This is a rough approximation for trend analysis. Exact token counts are recorded when available (e.g., OpenAI API).

@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     postgres_user: str = "postgres"
     postgres_password: str = "postgres"
 
+    llm_num_ctx: int = 32000
     llm_quiz_num_ctx: int = 64000
 
     neo4j_uri: str = "bolt://localhost:7687"

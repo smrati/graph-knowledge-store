@@ -163,6 +163,54 @@ export interface QuizActiveResponse {
   total: number;
 }
 
+export interface LLMCallLog {
+  id: string;
+  operation: string;
+  model: string;
+  prompt_tokens: number | null;
+  completion_tokens: number | null;
+  total_tokens: number | null;
+  latency_ms: number;
+  success: boolean;
+  error_message: string | null;
+  input_chars: number | null;
+  output_chars: number | null;
+  num_ctx: number | null;
+  temperature: number | null;
+  article_id: string | null;
+  created_at: string;
+}
+
+export interface LLMCallLogListResponse {
+  logs: LLMCallLog[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface LLMOperationStats {
+  operation: string;
+  call_count: number;
+  success_count: number;
+  avg_latency_ms: number;
+  total_tokens: number;
+  avg_prompt_tokens: number;
+  avg_completion_tokens: number;
+}
+
+export interface LLMStatsResponse {
+  total_calls: number;
+  total_success: number;
+  total_failures: number;
+  success_rate: number;
+  avg_latency_ms: number;
+  total_tokens: number;
+  total_prompt_tokens: number;
+  total_completion_tokens: number;
+  operations: LLMOperationStats[];
+  recent_errors: LLMCallLog[];
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: { "Content-Type": "application/json" },
@@ -232,4 +280,22 @@ export const api = {
 
   getActiveQuiz: () =>
     request<QuizActiveResponse | null>("/quiz/active/now"),
+
+  getLLMStats: (fromDate?: string, toDate?: string) => {
+    let path = "/llm-logs/stats";
+    const params: string[] = [];
+    if (fromDate) params.push(`from=${fromDate}`);
+    if (toDate) params.push(`to=${toDate}`);
+    if (params.length) path += "?" + params.join("&");
+    return request<LLMStatsResponse>(path);
+  },
+
+  getLLMLogs: (page = 1, limit = 25, filters?: { operation?: string; success?: boolean; from?: string; to?: string }) => {
+    let path = `/llm-logs?page=${page}&limit=${limit}`;
+    if (filters?.operation) path += `&operation=${filters.operation}`;
+    if (filters?.success !== undefined) path += `&success=${filters.success}`;
+    if (filters?.from) path += `&from=${filters.from}`;
+    if (filters?.to) path += `&to=${filters.to}`;
+    return request<LLMCallLogListResponse>(path);
+  },
 };

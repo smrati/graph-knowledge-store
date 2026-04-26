@@ -206,6 +206,34 @@ QuizRunner renders based on quiz_type:
 Score card at end with "Try Again" button
 ```
 
+## LLM Call Logging
+
+Every LLM call (chat, generate_title, normalize_markdown_equations, embed) is logged automatically:
+
+```
+LLM function called (e.g., chat, embed, generate_title)
+        │
+        ▼  Start timer
+        │
+        ▼  Call LLM API
+        │
+        ▼  Stop timer, measure duration_ms
+        │
+        ├─ Extract usage from API response (prompt_tokens, completion_tokens)
+        │  OR estimate tokens: len(text) / 4 if API doesn't provide usage
+        │
+        ▼  INSERT into llm_call_logs (sync SQLAlchemy session):
+           - operation, model, input_text, output_text
+           - duration_ms, prompt_tokens, completion_tokens, total_tokens
+           - is_error, error_message, article_id (if applicable)
+        │
+        ▼  Dashboard:
+GET /api/llm-logs/stats   → aggregate counts, latency, tokens by operation
+GET /api/llm-logs         → paginated log entries (filterable by operation, is_error)
+```
+
+Token estimation uses ~4 chars/token when the API (e.g., Ollama) doesn't return usage data. The logging uses a sync DB session (`psycopg2-binary`) to avoid interfering with the async engine. Logs are kept indefinitely.
+
 ## Graph Neighbor Query
 
 ```

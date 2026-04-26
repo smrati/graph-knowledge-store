@@ -53,6 +53,26 @@ The `embedding` column uses Pgvector's `VECTOR` type. The dimension is configura
 
 **Changing the embedding dimension** requires dropping and recreating the `article_embeddings` table and re-embedding all articles.
 
+### `llm_call_logs` table
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | UUID | No | `gen_random_uuid()` | Primary key |
+| `operation` | VARCHAR(100) | No | — | LLM function name (e.g., `chat`, `embed`, `generate_title`, `normalize_markdown_equations`) |
+| `model` | VARCHAR(200) | No | — | Model identifier used |
+| `input_text` | TEXT | Yes | — | Input prompt (truncated to 500 chars in API responses) |
+| `output_text` | TEXT | Yes | — | LLM response |
+| `duration_ms` | FLOAT | Yes | — | Wall-clock duration in milliseconds |
+| `prompt_tokens` | INTEGER | Yes | — | Tokens in the prompt (from API or estimated ~4 chars/token) |
+| `completion_tokens` | INTEGER | Yes | — | Tokens in the response |
+| `total_tokens` | INTEGER | Yes | — | Sum of prompt + completion tokens |
+| `is_error` | BOOLEAN | No | `FALSE` | Whether the call failed |
+| `error_message` | TEXT | Yes | — | Error details if call failed |
+| `article_id` | UUID | Yes | — | FK to `articles.id` (`SET NULL` on delete) |
+| `created_at` | TIMESTAMPTZ | No | `now()` | When the call was made |
+
+Token counts are estimated at ~4 chars/token when the API (e.g., Ollama) doesn't provide usage data. Logs are kept indefinitely with no auto-cleanup.
+
 ### Entity types
 
 The `entities` JSONB column stores objects with these type values:

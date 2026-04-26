@@ -379,6 +379,102 @@ Generate a quiz from articles matching selected topics and/or keywords. Uses OR 
 
 ---
 
+## LLM Logs
+
+### `GET /api/llm-logs/stats`
+
+Get aggregate statistics for all LLM calls.
+
+**Response:**
+```json
+{
+  "total_calls": 150,
+  "total_errors": 3,
+  "total_prompt_tokens": 45000,
+  "total_completion_tokens": 12000,
+  "total_tokens": 57000,
+  "avg_duration_ms": 2340.5,
+  "operations": [
+    {
+      "operation": "chat",
+      "call_count": 80,
+      "error_count": 1,
+      "avg_duration_ms": 3100.2,
+      "total_prompt_tokens": 30000,
+      "total_completion_tokens": 10000,
+      "total_tokens": 40000
+    },
+    {
+      "operation": "embed",
+      "call_count": 50,
+      "error_count": 0,
+      "avg_duration_ms": 800.1,
+      "total_prompt_tokens": 12000,
+      "total_completion_tokens": 0,
+      "total_tokens": 12000
+    }
+  ]
+}
+```
+
+---
+
+### `GET /api/llm-logs`
+
+Paginated list of LLM call log entries.
+
+**Query Parameters:**
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `page` | integer | 1 | Page number (1-indexed) |
+| `limit` | integer | 20 | Results per page (max 100) |
+| `operation` | string | — | Filter by operation name |
+| `is_error` | boolean | — | Filter to errors only |
+
+**Response:**
+```json
+{
+  "logs": [
+    {
+      "id": "...",
+      "operation": "chat",
+      "model": "gemma4:e4b-it-q8_0",
+      "input_text": "Extract topics...",
+      "output_text": "{\"topics\": [...]}",
+      "duration_ms": 3100.5,
+      "prompt_tokens": 850,
+      "completion_tokens": 200,
+      "total_tokens": 1050,
+      "is_error": false,
+      "error_message": null,
+      "article_id": "...",
+      "created_at": "2026-04-27T10:30:00Z"
+    }
+  ],
+  "total": 150,
+  "page": 1,
+  "limit": 20
+}
+```
+
+`input_text` and `output_text` are truncated to 500 chars in the response.
+
+---
+
+### `GET /api/llm-logs/operations`
+
+List all distinct operation names for filtering.
+
+**Response:**
+```json
+{
+  "operations": ["chat", "embed", "generate_title", "normalize_markdown_equations"]
+}
+```
+
+---
+
 ## Graph API Notes
 
 All graph endpoints wrap synchronous Neo4j calls in `ThreadPoolExecutor` to avoid blocking the FastAPI async event loop.
