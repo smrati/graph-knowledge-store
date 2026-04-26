@@ -1,25 +1,37 @@
+import asyncio
 import json
 import logging
 import random
+from functools import partial
 
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.article import Article
+from app.models.quiz_attempt import QuizAttempt
 from app.services.llm_service import chat
+from app.database import async_session_factory
 
 logger = logging.getLogger(__name__)
 
-MAX_SAMPLED_ARTICLES = 6
-MAX_CONTENT_PER_ARTICLE = 1500
-MAX_PROMPT_CHARS = 8000
+
+def _questions_for_length(content_len: int) -> int:
+    if content_len < 2000:
+        return 1
+    if content_len < 5000:
+        return 2
+    if content_len < 10000:
+        return 3
+    return 4
+
 
 MCQ_SYSTEM = """You are an expert educator creating a multiple-choice quiz to test comprehension and synthesis.
 
-Below you will find article summaries with their metadata, followed by selected full article contents. Generate exactly {n} multiple-choice questions.
+You will be given ONE article. Generate exactly {{n}} multiple-choice question(s) from it.
 
 RULES:
-- Test UNDERSTANDING and SYNTHESIS across the articles, not copy-paste facts
+- Test UNDERSTANDING and SYNTHESIS, not copy-paste facts
 - Each question must have exactly 4 options labeled A, B, C, D
 - Only ONE option is correct
 - Wrong options (distractors) should be plausible but clearly incorrect to someone who understood the material
@@ -43,7 +55,7 @@ You MUST respond with ONLY a JSON array. No markdown, no backticks, no commentar
 
 SHORT_ANSWER_SYSTEM = """You are an expert educator creating short-answer questions to test deep understanding.
 
-Below you will find article summaries with their metadata, followed by selected full article contents. Generate exactly {n} short-answer questions.
+You will be given ONE article. Generate exactly {{n}} short-answer question(s) from it.
 
 RULES:
 - Questions should require 1-3 sentence answers
@@ -62,7 +74,7 @@ You MUST respond with ONLY a JSON array. No markdown, no backticks, no commentar
 
 FLASHCARD_SYSTEM = """You are an expert educator creating flashcards for spaced repetition learning.
 
-Below you will find article summaries with their metadata, followed by selected full article contents. Generate exactly {n} flashcards.
+You will be given ONE article. Generate exactly {{n}} flashcard(s) from it.
 
 RULES:
 - Front: A concept name, term, or focused question (concise, 1-2 lines max)
@@ -79,6 +91,16 @@ You MUST respond with ONLY a JSON array. No markdown, no backticks, no commentar
     "hint": "string"
   }}
 ]"""
+
+DEDUP_SECTION = """
+PREVIOUSLY GENERATED QUESTIONS (do NOT repeat or create similar questions):
+{existing}
+"""
+
+ARTICLE_PROMPT_TEMPLATE = """ARTICLE TITLE: {title}
+
+ARTICLE CONTENT:
+{content}"""
 
 
 class ArticleInfo:
@@ -130,53 +152,166 @@ async def fetch_articles(
     return articles
 
 
-def _build_prompt(articles: list[ArticleInfo], n: int) -> str:
-    summaries_section = "ARTICLE SUMMARIES:\n\n"
-    for a in articles:
-        topics_str = ", ".join(a.topics[:5]) if a.topics else "none"
-        keywords_str = ", ".join(a.keywords[:5]) if a.keywords else "none"
-        summaries_section += f"Title: {a.title}\n"
-        if a.summary:
-            summaries_section += f"Summary: {a.summary}\n"
-        summaries_section += f"Topics: [{topics_str}]\n"
-        summaries_section += f"Keywords: [{keywords_str}]\n\n"
-
-    sampled = articles
-    if len(articles) > MAX_SAMPLED_ARTICLES:
-        sampled = random.sample(articles, MAX_SAMPLED_ARTICLES)
-
-    detail_section = "DETAILED CONTENT (selected articles):\n\n"
-    for a in sampled:
-        truncated = a.content[:MAX_CONTENT_PER_ARTICLE]
-        detail_section += f"## {a.title}\n\n{truncated}\n\n---\n\n"
-
-    prompt = f"{summaries_section}\n{detail_section}\nGenerate {n} questions based on the above material."
-
-    if len(prompt) > MAX_PROMPT_CHARS:
-        prompt = prompt[:MAX_PROMPT_CHARS]
-
-    return prompt
+def _build_existing_questions_section(questions: list[dict], quiz_type: str) -> str:
+    if not questions:
+        return ""
+    lines = []
+    for i, q in enumerate(questions, 1):
+        if quiz_type == "mcq":
+            lines.append(f'{i}. "{q.get("question", "")}"')
+        elif quiz_type == "short_answer":
+            lines.append(f'{i}. "{q.get("question", "")}"')
+        elif quiz_type == "flashcard":
+            lines.append(f'{i}. Front: "{q.get("front", "")}"')
+    return DEDUP_SECTION.format(existing="\n".join(lines))
 
 
-def generate_mcq(articles: list[ArticleInfo], n: int) -> list[dict]:
-    system = MCQ_SYSTEM.format(n=n)
-    prompt = _build_prompt(articles, n)
-    raw = chat(prompt, system=system)
-    return _parse_json(raw)
+def _get_system_prompt(quiz_type: str, n: int) -> str:
+    if quiz_type == "mcq":
+        return MCQ_SYSTEM.format(n=n)
+    elif quiz_type == "short_answer":
+        return SHORT_ANSWER_SYSTEM.format(n=n)
+    else:
+        return FLASHCARD_SYSTEM.format(n=n)
 
 
-def generate_short_answer(articles: list[ArticleInfo], n: int) -> list[dict]:
-    system = SHORT_ANSWER_SYSTEM.format(n=n)
-    prompt = _build_prompt(articles, n)
-    raw = chat(prompt, system=system)
-    return _parse_json(raw)
+def _extract_question_text(q: dict, quiz_type: str) -> str:
+    if quiz_type == "flashcard":
+        return q.get("front", "").lower()
+    return q.get("question", "").lower()
 
 
-def generate_flashcards(articles: list[ArticleInfo], n: int) -> list[dict]:
-    system = FLASHCARD_SYSTEM.format(n=n)
-    prompt = _build_prompt(articles, n)
-    raw = chat(prompt, system=system)
-    return _parse_json(raw)
+def _is_duplicate(new_q: dict, existing: list[dict], quiz_type: str) -> bool:
+    new_text = _extract_question_text(new_q, quiz_type)
+    for existing_q in existing:
+        existing_text = _extract_question_text(existing_q, quiz_type)
+        if new_text == existing_text:
+            return True
+        shorter, longer = sorted([new_text, existing_text], key=len)
+        if len(shorter) > 20 and shorter in longer:
+            return True
+    return False
+
+
+async def run_generation(quiz_id: str, articles: list[ArticleInfo]) -> None:
+    loop = asyncio.get_event_loop()
+    async with async_session_factory() as session:
+        result = await session.execute(select(QuizAttempt).where(QuizAttempt.id == quiz_id))
+        attempt = result.scalar_one_or_none()
+        if not attempt:
+            logger.error("QuizAttempt %s not found for generation", quiz_id)
+            return
+
+        try:
+            num_ctx = settings.llm_quiz_num_ctx
+            questions: list[dict] = list(attempt.questions) if attempt.questions else []
+
+            shuffled = list(range(len(articles)))
+            random.shuffle(shuffled)
+            idx = 0
+            rounds = 0
+            max_rounds = len(articles) * 3
+
+            while len(questions) < attempt.num_questions and rounds < max_rounds:
+                remaining = attempt.num_questions - len(questions)
+                article_idx = shuffled[idx % len(shuffled)]
+                article = articles[article_idx]
+
+                k = min(_questions_for_length(len(article.content)), remaining)
+
+                system = _get_system_prompt(attempt.quiz_type, k)
+                dedup_section = _build_existing_questions_section(questions, attempt.quiz_type)
+
+                prompt = ARTICLE_PROMPT_TEMPLATE.format(title=article.title, content=article.content)
+                prompt = dedup_section + "\n" + prompt
+                prompt += f"\n\nGenerate exactly {k} question(s) from this article."
+
+                raw = await loop.run_in_executor(None, partial(chat, prompt, system, num_ctx))
+                parsed = _parse_json(raw)
+
+                added = 0
+                for q in parsed:
+                    if added >= k:
+                        break
+                    if not _is_duplicate(q, questions, attempt.quiz_type):
+                        questions.append(q)
+                        added += 1
+
+                if not parsed:
+                    logger.warning("Quiz generation: empty/invalid LLM response for article '%s', retrying once", article.title)
+                    raw2 = await loop.run_in_executor(None, partial(chat, prompt, system, num_ctx))
+                    parsed2 = _parse_json(raw2)
+                    for q in parsed2:
+                        if added >= k:
+                            break
+                        if not _is_duplicate(q, questions, attempt.quiz_type):
+                            questions.append(q)
+                            added += 1
+
+                attempt.questions = list(questions)
+                await session.commit()
+
+                idx += 1
+                rounds += 1
+
+            if len(questions) < attempt.num_questions:
+                logger.warning(
+                    "Quiz generation: only produced %d/%d questions after %d rounds",
+                    len(questions), attempt.num_questions, rounds,
+                )
+
+            attempt.status = "ready"
+            await session.commit()
+
+        except Exception as e:
+            logger.exception("Quiz generation failed for attempt %s", quiz_id)
+            attempt.status = "failed"
+            attempt.error = str(e)
+            await session.commit()
+
+
+async def get_active_quiz(session: AsyncSession) -> QuizAttempt | None:
+    stmt = select(QuizAttempt).where(QuizAttempt.status == "generating").order_by(QuizAttempt.created_at.desc()).limit(1)
+    result = await session.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+async def get_quiz_attempt(session: AsyncSession, quiz_id: str) -> QuizAttempt | None:
+    result = await session.execute(select(QuizAttempt).where(QuizAttempt.id == quiz_id))
+    return result.scalar_one_or_none()
+
+
+async def submit_quiz_answers(
+    session: AsyncSession,
+    quiz_id: str,
+    answers: list[dict],
+    score: int,
+    total: int,
+) -> QuizAttempt | None:
+    result = await session.execute(select(QuizAttempt).where(QuizAttempt.id == quiz_id))
+    attempt = result.scalar_one_or_none()
+    if not attempt:
+        return None
+    attempt.answers = answers
+    attempt.score = score
+    attempt.status = "completed"
+    from datetime import datetime, timezone
+    attempt.completed_at = datetime.now(timezone.utc)
+    await session.commit()
+    await session.refresh(attempt)
+    return attempt
+
+
+async def list_quiz_history(session: AsyncSession, limit: int = 20, offset: int = 0) -> list[QuizAttempt]:
+    stmt = (
+        select(QuizAttempt)
+        .where(QuizAttempt.status.in_(["ready", "completed"]))
+        .order_by(QuizAttempt.created_at.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
 
 
 def _parse_json(raw: str) -> list[dict]:
@@ -203,6 +338,24 @@ def _parse_json(raw: str) -> list[dict]:
             parsed = json.loads(cleaned[start:end + 1])
             if isinstance(parsed, list):
                 return parsed
+        except json.JSONDecodeError:
+            pass
+
+    if cleaned.startswith("{"):
+        try:
+            parsed = json.loads(cleaned)
+            if isinstance(parsed, dict):
+                return [parsed]
+        except json.JSONDecodeError:
+            pass
+
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start >= 0 and end > start:
+        try:
+            parsed = json.loads(cleaned[start:end + 1])
+            if isinstance(parsed, dict):
+                return [parsed]
         except json.JSONDecodeError:
             pass
 

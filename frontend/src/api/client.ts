@@ -108,11 +108,59 @@ export interface FlashcardItem {
 }
 
 export interface QuizResponse {
+  quiz_id: string;
   quiz_type: QuizType;
   topics: string[];
   keywords: string[];
   article_count: number;
   questions: McqQuestion[] | ShortAnswerQuestion[] | FlashcardItem[];
+  answers: Record<string, unknown>[] | null;
+  score: number | null;
+  total: number | null;
+  status: string;
+  created_at: string | null;
+  completed_at: string | null;
+}
+
+export interface QuizGenerateResponse {
+  quiz_id: string;
+  status: string;
+}
+
+export interface QuizStatusResponse {
+  quiz_id: string;
+  status: string;
+  progress: number;
+  total: number;
+  quiz_type: QuizType;
+  topics: string[];
+  keywords: string[];
+  article_count: number;
+  questions: McqQuestion[] | ShortAnswerQuestion[] | FlashcardItem[];
+  error: string | null;
+}
+
+export interface QuizHistoryItem {
+  quiz_id: string;
+  quiz_type: QuizType;
+  topics: string[];
+  keywords: string[];
+  score: number | null;
+  total: number | null;
+  num_questions: number;
+  article_count: number;
+  status: string;
+  created_at: string | null;
+  completed_at: string | null;
+}
+
+export interface QuizActiveResponse {
+  quiz_id: string;
+  quiz_type: QuizType;
+  topics: string[];
+  keywords: string[];
+  progress: number;
+  total: number;
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -165,5 +213,23 @@ export const api = {
   getGraphStats: () => request<GraphStats>("/graph/stats"),
 
   generateQuiz: (data: { topics?: string[]; keywords?: string[]; quiz_type: QuizType; num_questions: number }) =>
-    request<QuizResponse>("/quiz/generate", { method: "POST", body: JSON.stringify(data) }),
+    request<QuizGenerateResponse>("/quiz/generate", { method: "POST", body: JSON.stringify(data) }),
+
+  getQuizStatus: (quizId: string) =>
+    request<QuizStatusResponse>(`/quiz/status/${quizId}`),
+
+  getQuizResult: (quizId: string) =>
+    request<QuizResponse>(`/quiz/result/${quizId}`),
+
+  getQuiz: (quizId: string) =>
+    request<QuizResponse>(`/quiz/${quizId}`),
+
+  submitQuiz: (quizId: string, data: { answers: Record<string, unknown>[]; score: number; total: number }) =>
+    request<QuizResponse>(`/quiz/${quizId}/submit`, { method: "POST", body: JSON.stringify(data) }),
+
+  getQuizHistory: (limit = 20, offset = 0) =>
+    request<QuizHistoryItem[]>(`/quiz/history/list?limit=${limit}&offset=${offset}`),
+
+  getActiveQuiz: () =>
+    request<QuizActiveResponse | null>("/quiz/active/now"),
 };

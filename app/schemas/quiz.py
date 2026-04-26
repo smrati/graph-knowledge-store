@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 
@@ -6,6 +8,30 @@ class QuizGenerateRequest(BaseModel):
     keywords: list[str] = Field(default_factory=list)
     quiz_type: str = Field(pattern="^(mcq|short_answer|flashcard)$")
     num_questions: int = Field(default=5, ge=1, le=15)
+
+
+class QuizGenerateResponse(BaseModel):
+    quiz_id: str
+    status: str
+
+
+class QuizStatusResponse(BaseModel):
+    quiz_id: str
+    status: str
+    progress: int
+    total: int
+    quiz_type: str
+    topics: list[str]
+    keywords: list[str]
+    article_count: int
+    questions: list[dict]
+    error: str | None = None
+
+
+class QuizSubmitRequest(BaseModel):
+    answers: list[dict] = Field(default_factory=list)
+    score: int
+    total: int
 
 
 class McqOption(BaseModel):
@@ -33,8 +59,38 @@ class FlashcardItem(BaseModel):
 
 
 class QuizResponse(BaseModel):
+    quiz_id: str
     quiz_type: str
     topics: list[str]
     keywords: list[str]
     article_count: int
     questions: list[dict]
+    answers: list[dict] | None = None
+    score: int | None = None
+    total: int | None = None
+    status: str
+    created_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
+class QuizHistoryItem(BaseModel):
+    quiz_id: str
+    quiz_type: str
+    topics: list[str]
+    keywords: list[str]
+    score: int | None = None
+    total: int | None = None
+    num_questions: int
+    article_count: int
+    status: str
+    created_at: datetime | None = None
+    completed_at: datetime | None = None
+
+
+class QuizActiveResponse(BaseModel):
+    quiz_id: str
+    quiz_type: str
+    topics: list[str]
+    keywords: list[str]
+    progress: int
+    total: int

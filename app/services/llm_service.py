@@ -7,9 +7,9 @@ def get_client() -> OpenAI:
     return OpenAI(base_url=settings.llm_base_url, api_key=settings.llm_api_key)
 
 
-def chat(prompt: str, system: str = "You are a helpful assistant.") -> str:
+def chat(prompt: str, system: str = "You are a helpful assistant.", num_ctx: int | None = None) -> str:
     client = get_client()
-    response = client.chat.completions.create(
+    kwargs: dict = dict(
         model=settings.llm_chat_model,
         messages=[
             {"role": "system", "content": system},
@@ -17,6 +17,9 @@ def chat(prompt: str, system: str = "You are a helpful assistant.") -> str:
         ],
         temperature=0.1,
     )
+    if num_ctx is not None:
+        kwargs["extra_body"] = {"num_ctx": num_ctx}
+    response = client.chat.completions.create(**kwargs)
     return response.choices[0].message.content
 
 

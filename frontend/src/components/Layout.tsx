@@ -1,5 +1,7 @@
-import { useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useSnackbar } from "notistack";
+import { api } from "../api/client";
 import Drawer from "@mui/material/Drawer";
 import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
@@ -8,6 +10,8 @@ import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import Typography from "@mui/material/Typography";
 import Box from "@mui/material/Box";
+import Badge from "@mui/material/Badge";
+import Button from "@mui/material/Button";
 import Tooltip from "@mui/material/Tooltip";
 import IconButton from "@mui/material/IconButton";
 import MenuBookOutlinedIcon from "@mui/icons-material/MenuBookOutlined";
@@ -19,9 +23,10 @@ import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
 import ChevronLeftOutlinedIcon from "@mui/icons-material/ChevronLeftOutlined";
 import ChevronRightOutlinedIcon from "@mui/icons-material/ChevronRightOutlined";
-import MenuOutlinedIcon from "@mui/icons-material/MenuOutlined";
 import ScrollButtons from "./ScrollButtons";
 import { useThemeMode } from "./MaterialThemeProvider";
+
+const ACTIVE_QUIZ_KEY = "active-quiz-id";
 
 const NAV_ITEMS = [
   { to: "/", label: "Articles", icon: <MenuBookOutlinedIcon />, end: true },
@@ -39,6 +44,12 @@ export default function Layout() {
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem("sidebar-collapsed") === "true"; } catch { return false; }
   });
+  const [quizGenerating, setQuizGenerating] = useState(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const notifiedRef = useRef<string | null>(null);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { enqueueSnackbar, closeSnackbar } = useSnackbar();
 
   const width = collapsed ? DRAWER_COLLAPSED : DRAWER_FULL;
 
@@ -49,6 +60,67 @@ export default function Layout() {
       return next;
     });
   }
+
+  useEffect(() => {
+    let active = true;
+
+    async function poll() {
+      const id = localStorage.getItem(ACTIVE_QUIZ_KEY);
+      if (!id) {
+        setQuizGenerating(false);
+        return;
+      }
+
+      try {
+        const status = await api.getQuizStatus(id);
+        if (!active) return;
+
+        if (status.status === "ready" && notifiedRef.current !== id) {
+          notifiedRef.current = id;
+          setQuizGenerating(false);
+          localStorage.removeItem(ACTIVE_QUIZ_KEY);
+
+          if (!location.pathname.startsWith("/quiz")) {
+            enqueueSnackbar("Your quiz is ready!", {
+              variant: "success",
+              autoHideDuration: 8000,
+              action: (key) => (
+                <Button
+                  color="inherit"
+                  size="small"
+                  onClick={() => {
+                    closeSnackbar(key);
+                    navigate("/quiz");
+                  }}
+                >
+                  Go to Quiz
+                </Button>
+              ),
+            });
+          }
+        } else if (status.status === "failed") {
+          setQuizGenerating(false);
+          localStorage.removeItem(ACTIVE_QUIZ_KEY);
+        } else if (status.status === "generating") {
+          setQuizGenerating(true);
+        }
+      } catch {
+        if (!active) return;
+        setQuizGenerating(false);
+      }
+    }
+
+    poll();
+    pollRef.current = setInterval(poll, 5000);
+
+    return () => {
+      active = false;
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+  }, [location.pathname, enqueueSnackbar, closeSnackbar, navigate]);
 
   return (
     <Box sx={{ display: "flex", minHeight: "100vh" }}>
@@ -82,34 +154,48 @@ export default function Layout() {
         </Box>
 
         <List sx={{ px: 1, pt: 0.5 }}>
-          {NAV_ITEMS.map(({ to, label, icon, end }) => (
-            <ListItem key={to} disablePadding sx={{ mb: 0.5 }}>
-              <Tooltip title={collapsed ? label : ""} arrow placement="right">
-                <ListItemButton
-                  component={NavLink}
-                  to={to}
-                  end={end}
-                  sx={{
-                    borderRadius: 2,
-                    py: 1,
-                    justifyContent: collapsed ? "center" : "flex-start",
-                    px: collapsed ? 0 : 2,
-                    "&.active": {
-                      bgcolor: "primary.main",
-                      color: "#fff",
-                      "& .MuiListItemIcon-root": { color: "#fff" },
-                      "&:hover": { bgcolor: "primary.dark" },
-                    },
-                  }}
-                >
-                  <ListItemIcon sx={{ minWidth: collapsed ? 0 : 40, justifyContent: "center" }}>{icon}</ListItemIcon>
-                  {!collapsed && (
-                    <ListItemText primary={label} sx={{ "& .MuiListItemText-primary": { fontWeight: 500, fontSize: "0.9rem" } }} />
-                  )}
-                </ListItemButton>
-              </Tooltip>
-            </ListItem>
-          ))}
+          {NAV_ITEMS.map(({ to, label, icon, end }) => {
+            const isQuiz = to === "/quiz";
+            return (
+              <ListItem key={to} disablePadding sx={{ mb: 0.5 }}>
+                <Tooltip title={collapsed ? label : ""} arrow placement="right">
+                  <ListItemButton
+                    component={NavLink}
+                    to={to}
+                    end={end}
+                    sx={{
+                      borderRadius: 2,
+                      py: 1,
+                      justifyContent: collapsed ? "center" : "flex-start",
+                      px: collapsed ? 0 : 2,
+                      "&.active": {
+                        bgcolor: "primary.main",
+                        color: "#fff",
+                        "& .MuiListItemIcon-root": { color: "#fff" },
+                        "&:hover": { bgcolor: "primary.dark" },
+                      },
+                    }}
+                  >
+                    <ListItemIcon sx={{ minWidth: collapsed ? 0 : 40, justifyContent: "center" }}>
+                      {isQuiz ? (
+                        <Badge
+                          color="warning"
+                          variant="dot"
+                          invisible={!quizGenerating}
+                          sx={{ "& .MuiBadge-badge": { top: -2, right: -4 } }}
+                        >
+                          {icon}
+                        </Badge>
+                      ) : icon}
+                    </ListItemIcon>
+                    {!collapsed && (
+                      <ListItemText primary={label} sx={{ "& .MuiListItemText-primary": { fontWeight: 500, fontSize: "0.9rem" } }} />
+                    )}
+                  </ListItemButton>
+                </Tooltip>
+              </ListItem>
+            );
+          })}
         </List>
 
         {!collapsed && (

@@ -1,8 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import Fuse from "fuse.js";
-import { api, type QuizResponse, type QuizType } from "../api/client";
-import QuizRunner from "../components/QuizRunner";
+import { useSnackbar } from "notistack";
+import {
+  api,
+  type QuizResponse,
+  type QuizType,
+  type QuizHistoryItem,
+} from "../api/client";
+import QuizRunner, { type QuizAnswer } from "../components/QuizRunner";
 import Typography from "@mui/material/Typography";
 import TextField from "@mui/material/TextField";
 import Button from "@mui/material/Button";
@@ -10,12 +16,19 @@ import Chip from "@mui/material/Chip";
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import CircularProgress from "@mui/material/CircularProgress";
+import LinearProgress from "@mui/material/LinearProgress";
 import InputAdornment from "@mui/material/InputAdornment";
 import Slider from "@mui/material/Slider";
 import Alert from "@mui/material/Alert";
-import QuizOutlinedIcon from "@mui/icons-material/QuizOutlined";
+import Tabs from "@mui/material/Tabs";
+import Tab from "@mui/material/Tab";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
-import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
+import QuizOutlinedIcon from "@mui/icons-material/QuizOutlined";
+import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
+import AccessTimeOutlinedIcon from "@mui/icons-material/AccessTimeOutlined";
+
+const POLL_INTERVAL_MS = 3000;
+const ACTIVE_QUIZ_KEY = "active-quiz-id";
 
 const QUIZ_TYPES: { value: QuizType; label: string; description: string }[] = [
   { value: "mcq", label: "Multiple Choice", description: "4 options, immediate feedback with explanations" },
@@ -146,6 +159,17 @@ function ChipInput({
   );
 }
 
+function formatDate(iso: string | null) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function QuizTypeLabel({ type }: { type: QuizType }) {
+  const map: Record<QuizType, string> = { mcq: "Multiple Choice", short_answer: "Short Answer", flashcard: "Flashcards" };
+  return <>{map[type]}</>;
+}
+
 export default function QuizPage() {
   const [searchParams] = useSearchParams();
   const initialTopics = searchParams.get("topics")?.split(",").filter(Boolean) ||
@@ -153,16 +177,27 @@ export default function QuizPage() {
   const initialKeywords = searchParams.get("keywords")?.split(",").filter(Boolean) ||
     (searchParams.get("keyword") ? [searchParams.get("keyword")!] : []);
 
+  const [tab, setTab] = useState(0);
   const [selectedTopics, setSelectedTopics] = useState<string[]>(initialTopics);
   const [selectedKeywords, setSelectedKeywords] = useState<string[]>(initialKeywords);
   const [quizType, setQuizType] = useState<QuizType>("mcq");
   const [numQuestions, setNumQuestions] = useState(5);
   const [quiz, setQuiz] = useState<QuizResponse | null>(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [topics, setTopics] = useState<string[]>([]);
   const [keywords, setKeywords] = useState<string[]>([]);
   const [indexLoading, setIndexLoading] = useState(true);
+
+  const [, setQuizId] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [progress, setProgress] = useState(0);
+  const [total, setTotal] = useState(0);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const { enqueueSnackbar } = useSnackbar();
+
+  const [history, setHistory] = useState<QuizHistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [reviewQuiz, setReviewQuiz] = useState<QuizResponse | null>(null);
 
   useEffect(() => {
     api.getArticlesIndex().then((data) => {
@@ -178,14 +213,86 @@ export default function QuizPage() {
     });
   }, []);
 
+  useEffect(() => {
+    const savedId = localStorage.getItem(ACTIVE_QUIZ_KEY);
+    if (savedId) {
+      setQuizId(savedId);
+      setStatus("generating");
+      setTotal(numQuestions);
+      startPolling(savedId);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (tab === 1) loadHistory();
+  }, [tab]);
+
+  function loadHistory() {
+    setHistoryLoading(true);
+    api.getQuizHistory().then((data) => {
+      setHistory(data);
+      setHistoryLoading(false);
+    }).catch(() => setHistoryLoading(false));
+  }
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => stopPolling();
+  }, [stopPolling]);
+
+  const startPolling = useCallback((id: string) => {
+    stopPolling();
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await api.getQuizStatus(id);
+        setStatus(res.status);
+        setProgress(res.progress);
+        setTotal(res.total);
+
+        if (res.status === "ready") {
+          stopPolling();
+          localStorage.removeItem(ACTIVE_QUIZ_KEY);
+          const fullQuiz = await api.getQuizResult(id);
+          setQuiz(fullQuiz);
+          setQuizId(null);
+          setStatus(null);
+          enqueueSnackbar("Your quiz is ready!", { variant: "success", autoHideDuration: 4000 });
+        } else if (res.status === "failed") {
+          stopPolling();
+          localStorage.removeItem(ACTIVE_QUIZ_KEY);
+          setError(res.error || "Quiz generation failed");
+          setQuizId(null);
+          setStatus(null);
+        }
+      } catch {
+        stopPolling();
+        localStorage.removeItem(ACTIVE_QUIZ_KEY);
+        setError("Lost connection to quiz generator");
+        setQuizId(null);
+        setStatus(null);
+      }
+    }, POLL_INTERVAL_MS);
+  }, [stopPolling, enqueueSnackbar]);
+
   async function handleGenerate() {
     if (!selectedTopics.length && !selectedKeywords.length) {
       setError("Select at least one topic or keyword");
       return;
     }
     setError("");
-    setLoading(true);
     setQuiz(null);
+    setQuizId(null);
+    setStatus(null);
+    setProgress(0);
+    setTotal(0);
+    setReviewQuiz(null);
+
     try {
       const res = await api.generateQuiz({
         topics: selectedTopics,
@@ -193,17 +300,48 @@ export default function QuizPage() {
         quiz_type: quizType,
         num_questions: numQuestions,
       });
-      setQuiz(res);
+      setQuizId(res.quiz_id);
+      setStatus(res.status);
+      setProgress(0);
+      setTotal(numQuestions);
+      localStorage.setItem(ACTIVE_QUIZ_KEY, res.quiz_id);
+      startPolling(res.quiz_id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to generate quiz");
-    } finally {
-      setLoading(false);
+      setError(err instanceof Error ? err.message : "Failed to start quiz generation");
+    }
+  }
+
+  async function handleComplete(answers: QuizAnswer[], score: number) {
+    if (!quiz) return;
+    try {
+      await api.submitQuiz(quiz.quiz_id, { answers, score, total: quiz.questions.length });
+      enqueueSnackbar("Quiz results saved!", { variant: "success", autoHideDuration: 3000 });
+    } catch {
+      enqueueSnackbar("Failed to save quiz results", { variant: "error", autoHideDuration: 3000 });
     }
   }
 
   function handleRestart() {
     setQuiz(null);
+    setQuizId(null);
+    setStatus(null);
+    setProgress(0);
+    setTotal(0);
+    setReviewQuiz(null);
+    localStorage.removeItem(ACTIVE_QUIZ_KEY);
   }
+
+  async function handleReview(item: QuizHistoryItem) {
+    try {
+      const data = await api.getQuiz(item.quiz_id);
+      setReviewQuiz(data);
+      setQuiz(null);
+    } catch {
+      enqueueSnackbar("Failed to load quiz", { variant: "error" });
+    }
+  }
+
+  const isGenerating = status === "generating" || status === "pending";
 
   if (quiz) {
     const filterLabel = [
@@ -220,7 +358,34 @@ export default function QuizPage() {
             Based on {quiz.article_count} articles — {filterLabel}
           </Typography>
         </Box>
-        <QuizRunner quiz={quiz} onRestart={handleRestart} />
+        <QuizRunner quiz={quiz} onRestart={handleRestart} onComplete={handleComplete} />
+      </Box>
+    );
+  }
+
+  if (reviewQuiz) {
+    return (
+      <Box sx={{ maxWidth: 720 }}>
+        <Box sx={{ mb: 3, display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <Box>
+            <Typography variant="h5" sx={{ fontWeight: 600 }}>
+              Quiz Review
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {formatDate(reviewQuiz.completed_at || reviewQuiz.created_at)}
+              {reviewQuiz.score !== null && reviewQuiz.score !== undefined && (
+                <> — Score: {reviewQuiz.score}/{reviewQuiz.total}</>
+              )}
+            </Typography>
+          </Box>
+          <Button onClick={() => setReviewQuiz(null)}>Back to History</Button>
+        </Box>
+        <QuizRunner
+          quiz={reviewQuiz}
+          onRestart={() => setReviewQuiz(null)}
+          readOnly
+          onComplete={async () => {}}
+        />
       </Box>
     );
   }
@@ -232,88 +397,155 @@ export default function QuizPage() {
         Test your understanding with AI-generated questions from your articles
       </Typography>
 
-      <Paper sx={{ p: 3, borderRadius: 3, mb: 3 }}>
-        <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 2 }}>
-          Select topics and keywords
-        </Typography>
+      <Box sx={{ borderBottom: 1, borderColor: "divider", mb: 3 }}>
+        <Tabs value={tab} onChange={(_, v) => setTab(v)}>
+          <Tab icon={<QuizOutlinedIcon />} iconPosition="start" label="New Quiz" />
+          <Tab icon={<HistoryOutlinedIcon />} iconPosition="start" label={`History${history.length ? ` (${history.length})` : ""}`} />
+        </Tabs>
+      </Box>
 
-        <Box sx={{ mb: 3 }}>
-          <ChipInput
-            label="Topics"
-            available={topics}
-            selected={selectedTopics}
-            onChange={setSelectedTopics}
-          />
-        </Box>
+      {tab === 0 && (
+        <>
+          {isGenerating && (
+            <Paper sx={{ p: 3, borderRadius: 3, mb: 3, textAlign: "center" }}>
+              <CircularProgress size={32} sx={{ mb: 2 }} />
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                Generating quiz questions...
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Question {progress} of {total} ready
+              </Typography>
+              <Box sx={{ width: "100%", maxWidth: 400, mx: "auto" }}>
+                <LinearProgress
+                  variant="determinate"
+                  value={total > 0 ? (progress / total) * 100 : 0}
+                  sx={{ borderRadius: 4, height: 8 }}
+                />
+              </Box>
+              <Typography variant="caption" color="text.disabled" sx={{ display: "block", mt: 1.5 }}>
+                You can navigate away — generation continues in the background.
+              </Typography>
+            </Paper>
+          )}
 
-        <ChipInput
-          label="Keywords"
-          available={keywords}
-          selected={selectedKeywords}
-          onChange={setSelectedKeywords}
-        />
+          <Paper sx={{ p: 3, borderRadius: 3, mb: 3 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 2 }}>
+              Select topics and keywords
+            </Typography>
+            <Box sx={{ mb: 3 }}>
+              <ChipInput label="Topics" available={topics} selected={selectedTopics} onChange={setSelectedTopics} />
+            </Box>
+            <ChipInput label="Keywords" available={keywords} selected={selectedKeywords} onChange={setSelectedKeywords} />
+            {!selectedTopics.length && !selectedKeywords.length && !indexLoading && (
+              <Typography variant="caption" color="text.disabled" sx={{ display: "block", mt: 1.5 }}>
+                Select at least one topic or keyword to generate a quiz
+              </Typography>
+            )}
+          </Paper>
 
-        {!selectedTopics.length && !selectedKeywords.length && !indexLoading && (
-          <Typography variant="caption" color="text.disabled" sx={{ display: "block", mt: 1.5 }}>
-            Select at least one topic or keyword to generate a quiz
-          </Typography>
-        )}
-      </Paper>
+          <Paper sx={{ p: 3, borderRadius: 3, mb: 3 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1.5 }}>Quiz type</Typography>
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+              {QUIZ_TYPES.map((qt) => (
+                <Paper
+                  key={qt.value}
+                  variant="outlined"
+                  onClick={() => setQuizType(qt.value)}
+                  sx={{
+                    p: 2, cursor: "pointer", borderRadius: 2,
+                    borderColor: quizType === qt.value ? "primary.main" : "divider",
+                    bgcolor: quizType === qt.value ? "action.selected" : "transparent",
+                    transition: "all 0.15s",
+                    "&:hover": { borderColor: "primary.light" },
+                  }}
+                >
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>{qt.label}</Typography>
+                  <Typography variant="caption" color="text.secondary">{qt.description}</Typography>
+                </Paper>
+              ))}
+            </Box>
+          </Paper>
 
-      <Paper sx={{ p: 3, borderRadius: 3, mb: 3 }}>
-        <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1.5 }}>
-          Quiz type
-        </Typography>
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-          {QUIZ_TYPES.map((qt) => (
+          <Paper sx={{ p: 3, borderRadius: 3, mb: 3 }}>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+              Number of questions: {numQuestions}
+            </Typography>
+            <Slider
+              value={numQuestions}
+              onChange={(_, v) => setNumQuestions(v as number)}
+              min={3} max={15} step={1}
+              marks={[{ value: 3, label: "3" }, { value: 5, label: "5" }, { value: 10, label: "10" }, { value: 15, label: "15" }]}
+              valueLabelDisplay="auto"
+              sx={{ mt: 1 }}
+            />
+          </Paper>
+
+          {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+          <Button
+            variant="contained"
+            size="large"
+            fullWidth
+            startIcon={isGenerating ? <CircularProgress size={18} color="inherit" /> : <QuizOutlinedIcon />}
+            onClick={handleGenerate}
+            disabled={isGenerating || (!selectedTopics.length && !selectedKeywords.length)}
+            sx={{ py: 1.5, borderRadius: 2 }}
+          >
+            {isGenerating ? `Generating (${progress}/${total})...` : "Generate Quiz"}
+          </Button>
+        </>
+      )}
+
+      {tab === 1 && (
+        <>
+          {historyLoading && <Box sx={{ textAlign: "center", py: 4 }}><CircularProgress /></Box>}
+          {!historyLoading && history.length === 0 && (
+            <Paper sx={{ p: 4, textAlign: "center", borderRadius: 3 }}>
+              <Typography color="text.secondary">No quiz history yet. Generate your first quiz!</Typography>
+            </Paper>
+          )}
+          {history.map((item) => (
             <Paper
-              key={qt.value}
+              key={item.quiz_id}
               variant="outlined"
-              onClick={() => setQuizType(qt.value)}
-              sx={{
-                p: 2, cursor: "pointer", borderRadius: 2,
-                borderColor: quizType === qt.value ? "primary.main" : "divider",
-                bgcolor: quizType === qt.value ? "action.selected" : "transparent",
-                transition: "all 0.15s",
-                "&:hover": { borderColor: "primary.light" },
-              }}
+              sx={{ p: 2, mb: 1.5, borderRadius: 2, cursor: "pointer", transition: "all 0.15s", "&:hover": { borderColor: "primary.main", boxShadow: 1 } }}
+              onClick={() => handleReview(item)}
             >
-              <Typography variant="body2" sx={{ fontWeight: 600 }}>{qt.label}</Typography>
-              <Typography variant="caption" color="text.secondary">{qt.description}</Typography>
+              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <Box>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                    <QuizTypeLabel type={item.quiz_type} />
+                    <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1.5 }}>
+                      {item.num_questions} questions — {item.article_count} articles
+                    </Typography>
+                  </Typography>
+                  <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", mt: 0.5 }}>
+                    {item.topics.slice(0, 3).map((t) => (
+                      <Chip key={t} label={t} size="small" variant="outlined" color="primary" />
+                    ))}
+                    {item.topics.length > 3 && (
+                      <Chip label={`+${item.topics.length - 3}`} size="small" variant="outlined" />
+                    )}
+                  </Box>
+                </Box>
+                <Box sx={{ textAlign: "right" }}>
+                  {item.status === "completed" && item.score !== null ? (
+                    <Typography variant="h6" sx={{ fontWeight: 700, color: (item.score / item.num_questions) >= 0.8 ? "#4caf50" : (item.score / item.num_questions) >= 0.5 ? "warning.main" : "#ef5350" }}>
+                      {item.score}/{item.total}
+                    </Typography>
+                  ) : (
+                    <Chip label="Not taken" size="small" variant="outlined" color="warning" />
+                  )}
+                  <Typography variant="caption" color="text.disabled" sx={{ display: "flex", alignItems: "center", gap: 0.5, justifyContent: "flex-end", mt: 0.5 }}>
+                    <AccessTimeOutlinedIcon sx={{ fontSize: 12 }} />
+                    {formatDate(item.created_at)}
+                  </Typography>
+                </Box>
+              </Box>
             </Paper>
           ))}
-        </Box>
-      </Paper>
-
-      <Paper sx={{ p: 3, borderRadius: 3, mb: 3 }}>
-        <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
-          Number of questions: {numQuestions}
-        </Typography>
-        <Slider
-          value={numQuestions}
-          onChange={(_, v) => setNumQuestions(v as number)}
-          min={3}
-          max={15}
-          step={1}
-          marks={[{ value: 3, label: "3" }, { value: 5, label: "5" }, { value: 10, label: "10" }, { value: 15, label: "15" }]}
-          valueLabelDisplay="auto"
-          sx={{ mt: 1 }}
-        />
-      </Paper>
-
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
-
-      <Button
-        variant="contained"
-        size="large"
-        fullWidth
-        startIcon={loading ? <CircularProgress size={18} color="inherit" /> : <QuizOutlinedIcon />}
-        onClick={handleGenerate}
-        disabled={loading || (!selectedTopics.length && !selectedKeywords.length)}
-        sx={{ py: 1.5, borderRadius: 2 }}
-      >
-        {loading ? "Generating Quiz..." : "Generate Quiz"}
-      </Button>
+        </>
+      )}
     </Box>
   );
 }
