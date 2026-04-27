@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_session
 from app.models.quiz_attempt import QuizAttempt
 from app.schemas.quiz import (
+    ArticleQuizRequest,
     QuizActiveResponse,
     QuizGenerateRequest,
     QuizGenerateResponse,
@@ -39,6 +40,37 @@ async def generate_quiz(
         keywords=req.keywords,
         num_questions=n,
         article_count=len(articles),
+        status="generating",
+    )
+    session.add(attempt)
+    await session.commit()
+    await session.refresh(attempt)
+
+    quiz_id = attempt.id
+    asyncio.create_task(quiz_service.run_generation(quiz_id, articles))
+
+    return QuizGenerateResponse(quiz_id=quiz_id, status="generating")
+
+
+@router.post("/generate/article/{article_id}", response_model=QuizGenerateResponse)
+async def generate_article_quiz(
+    article_id: str,
+    req: ArticleQuizRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    article = await quiz_service.fetch_article_by_id(session, article_id)
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+
+    articles = [article]
+    n = min(req.num_questions, 4)
+
+    attempt = QuizAttempt(
+        quiz_type=req.quiz_type,
+        topics=article.topics,
+        keywords=article.keywords,
+        num_questions=n,
+        article_count=1,
         status="generating",
     )
     session.add(attempt)

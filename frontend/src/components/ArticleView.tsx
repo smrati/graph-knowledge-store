@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { api, type Article } from "../api/client";
+import { api, type Article, type QuizType } from "../api/client";
 import MarkdownPreview from "./MarkdownPreview";
 import RelatedArticles from "./RelatedArticles";
 import Typography from "@mui/material/Typography";
@@ -8,6 +8,10 @@ import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
+import ListItemIcon from "@mui/material/ListItemIcon";
+import ListItemText from "@mui/material/ListItemText";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
@@ -15,12 +19,26 @@ import DialogActions from "@mui/material/DialogActions";
 import CircularProgress from "@mui/material/CircularProgress";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
+import QuizOutlinedIcon from "@mui/icons-material/QuizOutlined";
+import CheckBoxOutlinedIcon from "@mui/icons-material/CheckBoxOutlined";
+import EditNoteOutlinedIcon from "@mui/icons-material/EditNoteOutlined";
+import StyleOutlinedIcon from "@mui/icons-material/StyleOutlined";
+
+const ACTIVE_QUIZ_KEY = "active-quiz-id";
+
+const QUIZ_TYPES: { value: QuizType; label: string; icon: React.ReactNode }[] = [
+  { value: "mcq", label: "Multiple Choice", icon: <CheckBoxOutlinedIcon fontSize="small" /> },
+  { value: "short_answer", label: "Short Answer", icon: <EditNoteOutlinedIcon fontSize="small" /> },
+  { value: "flashcard", label: "Flashcards", icon: <StyleOutlinedIcon fontSize="small" /> },
+];
 
 export default function ArticleView() {
   const { id } = useParams() as { id: string };
   const navigate = useNavigate();
   const [article, setArticle] = useState<Article | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [quizAnchor, setQuizAnchor] = useState<null | HTMLElement>(null);
+  const [quizLoading, setQuizLoading] = useState(false);
 
   useEffect(() => {
     api.getArticle(id).then(setArticle).catch(() => navigate("/"));
@@ -30,6 +48,20 @@ export default function ArticleView() {
     setConfirmOpen(false);
     await api.deleteArticle(article!.id);
     navigate("/");
+  }
+
+  async function handleQuizTypeSelect(quizType: QuizType) {
+    setQuizAnchor(null);
+    if (!article) return;
+    setQuizLoading(true);
+    try {
+      const numQuestions = Math.min(5, _questionsForLength(article.content.length));
+      const res = await api.generateArticleQuiz(article.id, { quiz_type: quizType, num_questions: numQuestions });
+      localStorage.setItem(ACTIVE_QUIZ_KEY, res.quiz_id);
+      navigate("/quiz");
+    } catch (err) {
+      setQuizLoading(false);
+    }
   }
 
   if (!article) {
@@ -45,6 +77,26 @@ export default function ArticleView() {
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", mb: 2 }}>
         <Typography variant="h4" sx={{ fontWeight: 700, flex: 1, pr: 2 }}>{article.title}</Typography>
         <Box sx={{ display: "flex", gap: 1, flexShrink: 0 }}>
+          <Button
+            variant="outlined"
+            startIcon={quizLoading ? <CircularProgress size={16} /> : <QuizOutlinedIcon />}
+            onClick={(e) => setQuizAnchor(e.currentTarget)}
+            disabled={quizLoading}
+          >
+            Quiz
+          </Button>
+          <Menu
+            anchorEl={quizAnchor}
+            open={Boolean(quizAnchor)}
+            onClose={() => setQuizAnchor(null)}
+          >
+            {QUIZ_TYPES.map((qt) => (
+              <MenuItem key={qt.value} onClick={() => handleQuizTypeSelect(qt.value)}>
+                <ListItemIcon>{qt.icon}</ListItemIcon>
+                <ListItemText>{qt.label}</ListItemText>
+              </MenuItem>
+            ))}
+          </Menu>
           <Button
             variant="outlined"
             startIcon={<EditOutlinedIcon />}
@@ -111,4 +163,11 @@ export default function ArticleView() {
       </Dialog>
     </Box>
   );
+}
+
+function _questionsForLength(len: number): number {
+  if (len < 2000) return 1;
+  if (len < 5000) return 2;
+  if (len < 10000) return 3;
+  return 4;
 }

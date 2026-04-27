@@ -263,6 +263,9 @@ export const api = {
   generateQuiz: (data: { topics?: string[]; keywords?: string[]; quiz_type: QuizType; num_questions: number }) =>
     request<QuizGenerateResponse>("/quiz/generate", { method: "POST", body: JSON.stringify(data) }),
 
+  generateArticleQuiz: (articleId: string, data: { quiz_type: QuizType; num_questions: number }) =>
+    request<QuizGenerateResponse>(`/quiz/generate/article/${articleId}`, { method: "POST", body: JSON.stringify(data) }),
+
   getQuizStatus: (quizId: string) =>
     request<QuizStatusResponse>(`/quiz/status/${quizId}`),
 

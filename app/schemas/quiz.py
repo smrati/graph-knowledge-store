@@ -10,6 +10,11 @@ class QuizGenerateRequest(BaseModel):
     num_questions: int = Field(default=5, ge=1, le=15)
 
 
+class ArticleQuizRequest(BaseModel):
+    quiz_type: str = Field(pattern="^(mcq|short_answer|flashcard)$")
+    num_questions: int = Field(default=5, ge=1, le=15)
+
+
 class QuizGenerateResponse(BaseModel):
     quiz_id: str
     status: str

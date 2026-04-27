@@ -152,6 +152,24 @@ async def fetch_articles(
     return articles
 
 
+async def fetch_article_by_id(session: AsyncSession, article_id: str) -> ArticleInfo | None:
+    stmt = select(
+        Article.title, Article.summary, Article.topics, Article.keywords, Article.content,
+    ).where(Article.id == article_id)
+    result = await session.execute(stmt)
+    row = result.first()
+    if not row:
+        return None
+    title, summary, topics, keywords, content = row
+    return ArticleInfo(
+        title=title,
+        summary=summary,
+        topics=topics or [],
+        keywords=keywords or [],
+        content=content,
+    )
+
+
 def _build_existing_questions_section(questions: list[dict], quiz_type: str) -> str:
     if not questions:
         return ""
