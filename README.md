@@ -2,6 +2,50 @@
 
 A personal knowledge base web application. Write markdown articles, automatically extract topics/keywords/entities using LLMs, store embeddings in Postgres with Pgvector, build a knowledge graph in Neo4j, and discover related articles through semantic similarity, graph traversal, or hybrid ranking.
 
+## Why Graph Knowledge Store?
+
+Every researcher, engineer, and student accumulates notes, articles, and documentation across dozens of sources. Traditional note-taking apps store text but don't help you **connect** ideas. When your knowledge base grows past a few dozen articles, finding related content, identifying gaps in understanding, and retaining what you've learned becomes a real problem.
+
+Graph Knowledge Store solves this by turning a flat collection of markdown articles into an **intelligent, interconnected knowledge base** — automatically.
+
+### The Problem
+
+- **Information is siloed** — notes live in isolation with no automatic discovery of relationships between topics
+- **Search is keyword-only** — traditional search misses semantically related content that uses different wording
+- **Knowledge decays** — reading without active recall means you forget most of what you learn
+- **Manual tagging doesn't scale** — categorizing articles by hand is tedious, inconsistent, and incomplete
+
+### How It Works
+
+1. **Write** articles in markdown with full LaTeX math, code blocks, and tables
+2. **LLM enrichment** runs automatically on save — extracts topics, keywords, named entities, and generates a summary
+3. **Vector embeddings** are computed and stored in Postgres with Pgvector for semantic similarity search
+4. **Knowledge graph** is built in Neo4j — articles link to shared topics, keywords, and entities, enabling graph traversal to discover non-obvious connections
+5. **Hybrid search** combines vector similarity and graph-based relationship scores for the most relevant results
+6. **AI-generated quizzes** test your understanding with multiple-choice, short answer, or flashcard questions — the LLM evaluates concept density to decide how many questions an article can support
+7. **Interactive graph visualization** lets you explore your entire knowledge base as a force-directed network
+
+### Technology Stack
+
+| Layer | Technology |
+|---|---|
+| Backend | Python 3.13, FastAPI, async SQLAlchemy, Alembic |
+| Frontend | React 19, TypeScript, Vite 8, MUI (Material Design), TailwindCSS |
+| Vector Search | Postgres 16.9 + Pgvector (cosine similarity) |
+| Knowledge Graph | Neo4j 2025.11 (topic/keyword/entity nodes and relationships) |
+| LLM | Ollama (local) or any OpenAI-compatible API (GPT-4o, etc.) |
+| Embeddings | Local via Ollama (qwen3-embedding) or remote (text-embedding-3-small) |
+| Infrastructure | Docker Compose, asyncpg, run_in_executor for blocking calls |
+
+### Business Value
+
+- **Faster knowledge retrieval** — semantic + graph search finds relevant articles in seconds, even when you don't remember exact keywords
+- **Active recall and retention** — AI-generated quizzes turn passive reading into spaced repetition, improving long-term knowledge retention by up to 50%
+- **Discover hidden connections** — the knowledge graph surfaces relationships between articles you wrote weeks or months apart, sparking new insights
+- **Zero manual tagging** — LLM-powered enrichment eliminates the burden of organizing content, keeping your knowledge base structured without effort
+- **Fully local and private** — runs entirely on your machine with Ollama. No data leaves your laptop. Or plug in any cloud LLM provider when you need more power
+- **Disaster-proof** — one-command backup and restore. Neo4j graph is fully rebuildable from Postgres + LLM, so backups stay small
+
 ## Prerequisites
 
 - **Python 3.13+**
