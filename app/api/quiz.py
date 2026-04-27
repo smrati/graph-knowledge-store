@@ -63,13 +63,12 @@ async def generate_article_quiz(
         raise HTTPException(status_code=404, detail="Article not found")
 
     articles = [article]
-    n = min(req.num_questions, 4)
 
     attempt = QuizAttempt(
         quiz_type=req.quiz_type,
         topics=article.topics,
         keywords=article.keywords,
-        num_questions=n,
+        num_questions=10,
         article_count=1,
         status="generating",
     )

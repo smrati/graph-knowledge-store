@@ -55,8 +55,7 @@ export default function ArticleView() {
     if (!article) return;
     setQuizLoading(true);
     try {
-      const numQuestions = Math.min(5, _questionsForLength(article.content.length));
-      const res = await api.generateArticleQuiz(article.id, { quiz_type: quizType, num_questions: numQuestions });
+      const res = await api.generateArticleQuiz(article.id, { quiz_type: quizType, num_questions: 10 });
       localStorage.setItem(ACTIVE_QUIZ_KEY, res.quiz_id);
       navigate("/quiz");
     } catch (err) {
@@ -163,11 +162,4 @@ export default function ArticleView() {
       </Dialog>
     </Box>
   );
-}
-
-function _questionsForLength(len: number): number {
-  if (len < 2000) return 1;
-  if (len < 5000) return 2;
-  if (len < 10000) return 3;
-  return 4;
 }

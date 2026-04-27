@@ -26,6 +26,17 @@ def _questions_for_length(content_len: int) -> int:
     return 4
 
 
+def _assess_question_count(content: str, title: str, quiz_type: str) -> int:
+    prompt = ASSESS_PROMPT.format(quiz_type=quiz_type, title=title, content=content)
+    raw = chat(prompt, "You are a helpful assistant that responds with only integers.", num_ctx=min(len(content) + 500, settings.llm_quiz_num_ctx))
+    text = raw.strip()
+    digits = "".join(c for c in text if c.isdigit())
+    if digits:
+        return max(1, min(int(digits), 15))
+    logger.warning("Assessment returned unparseable response: %s, falling back to length-based", text[:200])
+    return _questions_for_length(len(content))
+
+
 MCQ_SYSTEM = """You are an expert educator creating a multiple-choice quiz to test comprehension and synthesis.
 
 You will be given ONE article. Generate exactly {{n}} multiple-choice question(s) from it.
@@ -98,6 +109,20 @@ PREVIOUSLY GENERATED QUESTIONS (do NOT repeat or create similar questions):
 """
 
 ARTICLE_PROMPT_TEMPLATE = """ARTICLE TITLE: {title}
+
+ARTICLE CONTENT:
+{content}"""
+
+ASSESS_PROMPT = """You are an expert educator. Read the following article and determine how many distinct, high-quality {quiz_type} questions can be generated from it.
+
+Consider:
+- How many separate concepts, facts, relationships, or procedures are covered
+- Whether there is enough depth for questions that test understanding (not just recall)
+- Whether the concepts are distinct enough to avoid repetitive questions
+
+Respond with ONLY a single integer between 1 and 15. No explanation, no other text.
+
+ARTICLE TITLE: {title}
 
 ARTICLE CONTENT:
 {content}"""
@@ -223,6 +248,18 @@ async def run_generation(quiz_id: str, articles: list[ArticleInfo]) -> None:
         try:
             num_ctx = settings.llm_quiz_num_ctx
             questions: list[dict] = list(attempt.questions) if attempt.questions else []
+
+            use_llm_assessment = len(articles) == 1 and attempt.num_questions >= 10
+
+            if use_llm_assessment:
+                article = articles[0]
+                assessed = await loop.run_in_executor(
+                    None, partial(_assess_question_count, article.content, article.title, attempt.quiz_type),
+                )
+                assessed = min(assessed, 15)
+                attempt.num_questions = assessed
+                logger.info("LLM assessed %d questions for article '%s'", assessed, article.title)
+                await session.commit()
 
             shuffled = list(range(len(articles)))
             random.shuffle(shuffled)
