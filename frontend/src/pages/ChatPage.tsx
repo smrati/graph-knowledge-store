@@ -88,12 +88,24 @@ export default function ChatPage() {
     setLoading(true);
 
     try {
-      const res = await api.askRAG(query, sessionId);
+      let fullContent = "";
+      let sources: { id: string; title: string; score: number }[] = [];
+      for await (const event of api.streamRAG(query, sessionId)) {
+        if (event.type === "chunk") {
+          fullContent += event.content;
+          const current = fullContent;
+          setMessages((prev) => [
+            ...prev.slice(0, -1),
+            { role: "assistant", content: current },
+          ]);
+        } else if (event.type === "sources") {
+          sources = event.sources;
+        }
+      }
       setMessages((prev) => [
         ...prev.slice(0, -1),
-        { role: "assistant", content: res.answer, sources: res.sources },
+        { role: "assistant", content: fullContent, sources },
       ]);
-
       setSessions((prev) =>
         prev.map((s) => (s.id === sessionId ? { ...s, updated_at: new Date().toISOString() } : s))
       );

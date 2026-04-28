@@ -339,4 +339,39 @@ export const api = {
 
   deleteChatSession: (sessionId: string) =>
     request<void>(`/rag/sessions/${sessionId}`, { method: "DELETE" }),
+
+  streamRAG: async function* (
+    query: string,
+    sessionId?: string,
+  ): AsyncGenerator<{ type: "chunk"; content: string } | { type: "sources"; sources: { id: string; title: string; score: number }[] }> {
+    const res = await fetch(`${API_BASE}/rag/ask/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ query, session_id: sessionId }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || "Request failed");
+    }
+    const reader = res.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop()!;
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith("data: ")) continue;
+        const data = trimmed.slice(6);
+        if (data === "[DONE]") return;
+        try {
+          const parsed = JSON.parse(data);
+          yield parsed;
+        } catch { /* skip malformed */ }
+      }
+    }
+  },
 };

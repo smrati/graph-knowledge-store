@@ -1,3 +1,4 @@
+import json
 import logging
 from datetime import datetime, timezone
 
@@ -8,7 +9,7 @@ from app.config import settings
 from app.models.article import Article
 from app.models.chat import ChatMessage, ChatSession
 from app.services import embedding_service as emb_service
-from app.services.llm_service import chat_messages
+from app.services.llm_service import chat_messages, chat_messages_stream
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +146,52 @@ async def ask(session: AsyncSession, query: str, session_id: str | None = None) 
             await session.commit()
 
     return {"answer": answer, "sources": sources}
+
+
+async def prepare_ask(session: AsyncSession, query: str, session_id: str | None = None) -> tuple[list[dict], list[dict] | None]:
+    articles = await retrieve_articles(session, query, limit=5)
+    history = None
+    if session_id:
+        existing = (await session.execute(
+            select(ChatMessage)
+            .where(ChatMessage.session_id == session_id)
+            .order_by(ChatMessage.created_at)
+        )).scalars().all()
+        history = [{"role": m.role, "content": m.content} for m in existing]
+        history = _trim_history(history)
+    return articles, history
+
+
+def generate_answer_stream(query: str, articles: list[dict], history: list[dict] | None = None):
+    context = _build_context(articles)
+    context_msg = RAG_PROMPT_TEMPLATE.format(context=context, query=query)
+    num_ctx = min(len(context) + len(query) + (sum(len(m.get("content", "")) for m in (history or []))) + 1000, settings.llm_quiz_num_ctx)
+
+    messages = [{"role": "system", "content": RAG_SYSTEM}]
+    for m in (history or []):
+        messages.append({"role": m["role"], "content": m["content"]})
+    messages.append({"role": "user", "content": context_msg})
+
+    yield from chat_messages_stream(messages, num_ctx)
+
+
+async def save_messages(session: AsyncSession, session_id: str, query: str, answer: str, sources: list[dict]) -> None:
+    chat_session = await session.get(ChatSession, session_id)
+    if not chat_session:
+        return
+    session.add(ChatMessage(session_id=session_id, role="user", content=query))
+    session.add(ChatMessage(session_id=session_id, role="assistant", content=answer, sources=sources))
+
+    count = (await session.execute(
+        select(ChatMessage).where(ChatMessage.session_id == session_id)
+    )).scalars().all()
+    if len(count) <= 2:
+        chat_session.title = query[:200]
+        session.add(chat_session)
+
+    chat_session.updated_at = datetime.now(timezone.utc)
+    session.add(chat_session)
+    await session.commit()
 
 
 async def create_session(session: AsyncSession) -> ChatSession:

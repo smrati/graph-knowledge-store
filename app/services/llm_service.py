@@ -61,6 +61,22 @@ def _call_llm(
         raise
 
 
+def chat_messages_stream(messages: list[dict], num_ctx: int | None = None):
+    ctx = num_ctx or settings.llm_num_ctx
+    client = get_client()
+    stream = client.chat.completions.create(
+        model=settings.llm_chat_model,
+        messages=messages,
+        temperature=0.1,
+        stream=True,
+        extra_body={"num_ctx": ctx},
+    )
+    for chunk in stream:
+        delta = chunk.choices[0].delta if chunk.choices else None
+        if delta and delta.content:
+            yield delta.content
+
+
 def chat(
     prompt: str,
     system: str = "You are a helpful assistant.",

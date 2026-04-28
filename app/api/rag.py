@@ -1,6 +1,9 @@
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.responses import StreamingResponse
 
 from app.database import get_session
 from app.services import rag_service
@@ -38,6 +41,71 @@ async def ask(req: AskRequest, session: AsyncSession = Depends(get_session)):
     if not req.query.strip():
         raise HTTPException(status_code=400, detail="Query cannot be empty")
     return await rag_service.ask(session, req.query, req.session_id)
+
+
+@router.post("/ask/stream")
+async def ask_stream(req: AskRequest, session: AsyncSession = Depends(get_session)):
+    if not req.query.strip():
+        raise HTTPException(status_code=400, detail="Query cannot be empty")
+
+    articles, history = await rag_service.prepare_ask(session, req.query, req.session_id)
+
+    if not articles:
+        no_results_msg = "I couldn't find any relevant articles in your knowledge base to answer this question. Try adding more articles on this topic."
+        sources = []
+
+        async def _no_results():
+            yield f"data: {json.dumps({'type': 'chunk', 'content': no_results_msg})}\n\n"
+            yield f"data: {json.dumps({'type': 'sources', 'sources': sources})}\n\n"
+            yield "data: [DONE]\n\n"
+
+        return StreamingResponse(_no_results(), media_type="text/event-stream")
+
+    from app.database import async_session_factory
+    saved_session_id = req.session_id
+    saved_query = req.query
+    saved_sources = [{"id": a["id"], "title": a["title"], "score": round(a["score"], 3)} for a in articles]
+
+    async def _stream():
+        import asyncio
+        import queue
+        import threading
+
+        q: queue.Queue = queue.Queue()
+
+        def _producer():
+            try:
+                for chunk in rag_service.generate_answer_stream(saved_query, articles, history):
+                    q.put(chunk)
+            except Exception as e:
+                q.put(e)
+            finally:
+                q.put(None)
+
+        thread = threading.Thread(target=_producer)
+        thread.start()
+
+        full_answer = ""
+        loop = asyncio.get_event_loop()
+        while True:
+            chunk = await loop.run_in_executor(None, q.get)
+            if chunk is None:
+                break
+            if isinstance(chunk, Exception):
+                yield f"data: {json.dumps({'type': 'error', 'content': str(chunk)})}\n\n"
+                yield "data: [DONE]\n\n"
+                return
+            full_answer += chunk
+            yield f"data: {json.dumps({'type': 'chunk', 'content': chunk})}\n\n"
+
+        yield f"data: {json.dumps({'type': 'sources', 'sources': saved_sources})}\n\n"
+        yield "data: [DONE]\n\n"
+
+        if saved_session_id:
+            async with async_session_factory() as db:
+                await rag_service.save_messages(db, saved_session_id, saved_query, full_answer, saved_sources)
+
+    return StreamingResponse(_stream(), media_type="text/event-stream")
 
 
 @router.post("/sessions", response_model=SessionResponse)
