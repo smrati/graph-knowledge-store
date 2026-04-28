@@ -130,7 +130,10 @@ export default function ChatPage() {
   }
 
   return (
-    <Box sx={{ display: "flex", height: "calc(100vh - 64px)", mt: -3, mx: -3 }}>
+    <Box sx={{
+      display: "flex",
+      height: "calc(100vh - 64px)",
+    }}>
       <Box sx={{ width: 260, borderRight: 1, borderColor: "divider", display: "flex", flexDirection: "column", bgcolor: "background.paper" }}>
         <Box sx={{ p: 2 }}>
           <Button
@@ -251,7 +254,7 @@ export default function ChatPage() {
         </Box>
 
         <Box sx={{ p: 2, borderTop: 1, borderColor: "divider", bgcolor: "background.paper" }}>
-          <Box sx={{ display: "flex", gap: 1, maxWidth: 800, mx: "auto" }}>
+          <Box sx={{ display: "flex", gap: 1, maxWidth: 900, mx: "auto", width: "100%" }}>
             <TextField
               fullWidth
               multiline

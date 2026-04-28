@@ -223,7 +223,7 @@ export default function Layout() {
         )}
       </Drawer>
       <Box component="main" sx={{ flex: 1, overflow: "auto", bgcolor: "background.default" }}>
-        <Box sx={{ maxWidth: 1200, mx: "auto", p: 3 }}>
+        <Box sx={location.pathname === "/chat" ? { height: "100%" } : { maxWidth: 1200, mx: "auto", p: 3 }}>
           <Outlet />
         </Box>
       </Box>
