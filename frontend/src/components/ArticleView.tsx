@@ -19,6 +19,8 @@ import DialogActions from "@mui/material/DialogActions";
 import CircularProgress from "@mui/material/CircularProgress";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
+import ContentCopyOutlinedIcon from "@mui/icons-material/ContentCopyOutlined";
+import CheckOutlinedIcon from "@mui/icons-material/CheckOutlined";
 import QuizOutlinedIcon from "@mui/icons-material/QuizOutlined";
 import CheckBoxOutlinedIcon from "@mui/icons-material/CheckBoxOutlined";
 import EditNoteOutlinedIcon from "@mui/icons-material/EditNoteOutlined";
@@ -39,6 +41,7 @@ export default function ArticleView() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [quizAnchor, setQuizAnchor] = useState<null | HTMLElement>(null);
   const [quizLoading, setQuizLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     api.getArticle(id).then(setArticle).catch(() => navigate("/"));
@@ -61,6 +64,15 @@ export default function ArticleView() {
     } catch (err) {
       setQuizLoading(false);
     }
+  }
+
+  function handleCopyMarkdown() {
+    if (!article) return;
+    const md = `# ${article.title}\n\n${article.content}`;
+    navigator.clipboard.writeText(md).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   }
 
   if (!article) {
@@ -96,6 +108,14 @@ export default function ArticleView() {
               </MenuItem>
             ))}
           </Menu>
+          <Button
+            variant="outlined"
+            startIcon={copied ? <CheckOutlinedIcon /> : <ContentCopyOutlinedIcon />}
+            onClick={handleCopyMarkdown}
+            color={copied ? "success" : "primary"}
+          >
+            {copied ? "Copied" : "Copy"}
+          </Button>
           <Button
             variant="outlined"
             startIcon={<EditOutlinedIcon />}
