@@ -5,6 +5,7 @@ from app.api.search import router as search_router
 from app.api.graph import router as graph_router
 from app.api.quiz import router as quiz_router
 from app.api.llm_logs import router as llm_logs_router
+from app.api.rag import router as rag_router
 
 router = APIRouter()
 router.include_router(articles_router)
@@ -12,3 +13,4 @@ router.include_router(search_router)
 router.include_router(graph_router)
 router.include_router(quiz_router)
 router.include_router(llm_logs_router)
+router.include_router(rag_router)

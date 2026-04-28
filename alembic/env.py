@@ -8,6 +8,7 @@ from alembic import context
 from app.config import settings
 from app.models.article import Base
 import app.models.quiz_attempt  # noqa: F401
+import app.models.chat  # noqa: F401
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.postgres_url)

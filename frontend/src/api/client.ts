@@ -163,6 +163,26 @@ export interface QuizActiveResponse {
   total: number;
 }
 
+export interface ChatSessionResponse {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChatMessageResponse {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  sources: { id: string; title: string; score: number }[] | null;
+  created_at: string;
+}
+
+export interface AskResponse {
+  answer: string;
+  sources: { id: string; title: string; score: number }[];
+}
+
 export interface LLMCallLog {
   id: string;
   operation: string;
@@ -304,4 +324,19 @@ export const api = {
     if (filters?.to) path += `&to=${filters.to}`;
     return request<LLMCallLogListResponse>(path);
   },
+
+  askRAG: (query: string, sessionId?: string) =>
+    request<AskResponse>("/rag/ask", { method: "POST", body: JSON.stringify({ query, session_id: sessionId }) }),
+
+  createChatSession: () =>
+    request<ChatSessionResponse>("/rag/sessions", { method: "POST" }),
+
+  listChatSessions: (limit = 50) =>
+    request<ChatSessionResponse[]>(`/rag/sessions?limit=${limit}`),
+
+  getChatMessages: (sessionId: string) =>
+    request<ChatMessageResponse[]>(`/rag/sessions/${sessionId}/messages`),
+
+  deleteChatSession: (sessionId: string) =>
+    request<void>(`/rag/sessions/${sessionId}`, { method: "DELETE" }),
 };

@@ -19,6 +19,7 @@ import AddBoxOutlinedIcon from "@mui/icons-material/AddBoxOutlined";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 import QuizOutlinedIcon from "@mui/icons-material/QuizOutlined";
+import SmartToyOutlinedIcon from "@mui/icons-material/SmartToyOutlined";
 import MonitorHeartOutlinedIcon from "@mui/icons-material/MonitorHeartOutlined";
 import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
@@ -35,6 +36,7 @@ const NAV_ITEMS = [
   { to: "/search", label: "Search", icon: <SearchOutlinedIcon />, end: false },
   { to: "/graph", label: "Graph", icon: <AccountTreeOutlinedIcon />, end: false },
   { to: "/quiz", label: "Quiz", icon: <QuizOutlinedIcon />, end: false },
+  { to: "/chat", label: "Ask AI", icon: <SmartToyOutlinedIcon />, end: false },
   { to: "/llm-monitor", label: "LLM Monitor", icon: <MonitorHeartOutlinedIcon />, end: false },
 ];
 
