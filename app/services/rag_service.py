@@ -8,7 +8,7 @@ from app.config import settings
 from app.models.article import Article
 from app.models.chat import ChatMessage, ChatSession
 from app.services import embedding_service as emb_service
-from app.services.llm_service import chat
+from app.services.llm_service import chat_messages
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +58,19 @@ async def retrieve_articles(session: AsyncSession, query: str, limit: int = 5) -
     return retrieved
 
 
+MAX_HISTORY_MESSAGES = 20
+MAX_HISTORY_CHARS = 20000
+
+
+def _trim_history(history: list[dict]) -> list[dict]:
+    messages = history[-MAX_HISTORY_MESSAGES:]
+    total = sum(len(m.get("content", "")) for m in messages)
+    while total > MAX_HISTORY_CHARS and len(messages) > 2:
+        removed = messages.pop(0)
+        total -= len(removed.get("content", ""))
+    return messages
+
+
 def _build_context(articles: list[dict]) -> str:
     parts = []
     for i, a in enumerate(articles, 1):
@@ -66,30 +79,42 @@ def _build_context(articles: list[dict]) -> str:
     return "\n\n".join(parts)
 
 
-def generate_answer(query: str, articles: list[dict]) -> str:
+def generate_answer(query: str, articles: list[dict], history: list[dict] | None = None) -> str:
     context = _build_context(articles)
-    num_ctx = min(len(context) + len(query) + 1000, settings.llm_quiz_num_ctx)
-    return chat(
-        RAG_PROMPT_TEMPLATE.format(context=context, query=query),
-        system=RAG_SYSTEM,
-        num_ctx=num_ctx,
-    )
+    context_msg = RAG_PROMPT_TEMPLATE.format(context=context, query=query)
+    num_ctx = min(len(context) + len(query) + (sum(len(m.get("content", "")) for m in (history or []))) + 1000, settings.llm_quiz_num_ctx)
+
+    messages = [{"role": "system", "content": RAG_SYSTEM}]
+    for m in (history or []):
+        messages.append({"role": m["role"], "content": m["content"]})
+    messages.append({"role": "user", "content": context_msg})
+
+    return chat_messages(messages, num_ctx)
 
 
 async def ask(session: AsyncSession, query: str, session_id: str | None = None) -> dict:
     articles = await retrieve_articles(session, query, limit=5)
 
+    history = None
+    if session_id:
+        existing = (await session.execute(
+            select(ChatMessage)
+            .where(ChatMessage.session_id == session_id)
+            .order_by(ChatMessage.created_at)
+        )).scalars().all()
+        history = [{"role": m.role, "content": m.content} for m in existing]
+        history = _trim_history(history)
+
     if not articles:
         answer = "I couldn't find any relevant articles in your knowledge base to answer this question. Try adding more articles on this topic."
         sources = []
     else:
-        from concurrent.futures import ThreadPoolExecutor
         from functools import partial
         import asyncio
 
         loop = asyncio.get_event_loop()
         answer = await loop.run_in_executor(
-            None, partial(generate_answer, query, articles)
+            None, partial(generate_answer, query, articles, history)
         )
         sources = [{"id": a["id"], "title": a["title"], "score": round(a["score"], 3)} for a in articles]
 

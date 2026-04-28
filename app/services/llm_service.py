@@ -16,17 +16,13 @@ def get_embedding_client() -> OpenAI:
     return OpenAI(base_url=base_url, api_key=api_key)
 
 
-def chat(
-    prompt: str,
-    system: str = "You are a helpful assistant.",
-    num_ctx: int | None = None,
+def _call_llm(
+    messages: list[dict],
+    ctx: int,
+    operation: str = "chat",
+    input_text: str = "",
     article_id=None,
 ) -> str:
-    ctx = num_ctx or settings.llm_num_ctx
-    messages = [
-        {"role": "system", "content": system},
-        {"role": "user", "content": prompt},
-    ]
     start = time.monotonic()
     try:
         client = get_client()
@@ -38,11 +34,11 @@ def chat(
         )
         content = response.choices[0].message.content
         log_llm_call(
-            operation="chat",
+            operation=operation,
             model=settings.llm_chat_model,
             latency_ms=int((time.monotonic() - start) * 1000),
             success=True,
-            input_text=prompt,
+            input_text=input_text,
             output_text=content or "",
             num_ctx=ctx,
             temperature=0.1,
@@ -52,17 +48,39 @@ def chat(
         return content
     except Exception as e:
         log_llm_call(
-            operation="chat",
+            operation=operation,
             model=settings.llm_chat_model,
             latency_ms=int((time.monotonic() - start) * 1000),
             success=False,
-            input_text=prompt,
+            input_text=input_text,
             error_message=str(e),
             num_ctx=ctx,
             temperature=0.1,
             article_id=article_id,
         )
         raise
+
+
+def chat(
+    prompt: str,
+    system: str = "You are a helpful assistant.",
+    num_ctx: int | None = None,
+    article_id=None,
+) -> str:
+    ctx = num_ctx or settings.llm_num_ctx
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": prompt},
+    ]
+    return _call_llm(messages, ctx, operation="chat", input_text=prompt, article_id=article_id)
+
+
+def chat_messages(
+    messages: list[dict],
+    num_ctx: int | None = None,
+) -> str:
+    ctx = num_ctx or settings.llm_num_ctx
+    return _call_llm(messages, ctx, operation="rag_chat", input_text=messages[-1].get("content", ""))
 
 
 def generate_title(content: str) -> str:
