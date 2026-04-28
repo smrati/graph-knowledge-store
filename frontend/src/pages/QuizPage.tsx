@@ -15,6 +15,7 @@ import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
+import IconButton from "@mui/material/IconButton";
 import CircularProgress from "@mui/material/CircularProgress";
 import LinearProgress from "@mui/material/LinearProgress";
 import InputAdornment from "@mui/material/InputAdornment";
@@ -22,10 +23,15 @@ import Slider from "@mui/material/Slider";
 import Alert from "@mui/material/Alert";
 import Tabs from "@mui/material/Tabs";
 import Tab from "@mui/material/Tab";
+import Dialog from "@mui/material/Dialog";
+import DialogTitle from "@mui/material/DialogTitle";
+import DialogContent from "@mui/material/DialogContent";
+import DialogActions from "@mui/material/DialogActions";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import QuizOutlinedIcon from "@mui/icons-material/QuizOutlined";
 import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
 import AccessTimeOutlinedIcon from "@mui/icons-material/AccessTimeOutlined";
+import DeleteOutlinedIcon from "@mui/icons-material/DeleteOutlined";
 
 const POLL_INTERVAL_MS = 3000;
 const ACTIVE_QUIZ_KEY = "active-quiz-id";
@@ -198,6 +204,7 @@ export default function QuizPage() {
   const [history, setHistory] = useState<QuizHistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [reviewQuiz, setReviewQuiz] = useState<QuizResponse | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<QuizHistoryItem | null>(null);
 
   useEffect(() => {
     api.getArticlesIndex().then((data) => {
@@ -339,6 +346,18 @@ export default function QuizPage() {
     } catch {
       enqueueSnackbar("Failed to load quiz", { variant: "error" });
     }
+  }
+
+  async function handleDeleteQuiz() {
+    if (!deleteTarget) return;
+    try {
+      await api.deleteQuiz(deleteTarget.quiz_id);
+      setHistory((prev) => prev.filter((h) => h.quiz_id !== deleteTarget.quiz_id));
+      enqueueSnackbar("Quiz deleted", { variant: "success", autoHideDuration: 2000 });
+    } catch {
+      enqueueSnackbar("Failed to delete quiz", { variant: "error" });
+    }
+    setDeleteTarget(null);
   }
 
   const isGenerating = status === "generating" || status === "pending";
@@ -528,24 +547,46 @@ export default function QuizPage() {
                     )}
                   </Box>
                 </Box>
-                <Box sx={{ textAlign: "right" }}>
-                  {item.status === "completed" && item.score !== null ? (
-                    <Typography variant="h6" sx={{ fontWeight: 700, color: (item.score / item.num_questions) >= 0.8 ? "#4caf50" : (item.score / item.num_questions) >= 0.5 ? "warning.main" : "#ef5350" }}>
-                      {item.score}/{item.total}
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <Box sx={{ textAlign: "right" }}>
+                    {item.status === "completed" && item.score !== null ? (
+                      <Typography variant="h6" sx={{ fontWeight: 700, color: (item.score / item.num_questions) >= 0.8 ? "#4caf50" : (item.score / item.num_questions) >= 0.5 ? "warning.main" : "#ef5350" }}>
+                        {item.score}/{item.total}
+                      </Typography>
+                    ) : (
+                      <Chip label="Not taken" size="small" variant="outlined" color="warning" />
+                    )}
+                    <Typography variant="caption" color="text.disabled" sx={{ display: "flex", alignItems: "center", gap: 0.5, justifyContent: "flex-end", mt: 0.5 }}>
+                      <AccessTimeOutlinedIcon sx={{ fontSize: 12 }} />
+                      {formatDate(item.created_at)}
                     </Typography>
-                  ) : (
-                    <Chip label="Not taken" size="small" variant="outlined" color="warning" />
-                  )}
-                  <Typography variant="caption" color="text.disabled" sx={{ display: "flex", alignItems: "center", gap: 0.5, justifyContent: "flex-end", mt: 0.5 }}>
-                    <AccessTimeOutlinedIcon sx={{ fontSize: 12 }} />
-                    {formatDate(item.created_at)}
-                  </Typography>
+                  </Box>
+                  <IconButton
+                    size="small"
+                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(item); }}
+                    sx={{ color: "text.disabled", "&:hover": { color: "error.main" } }}
+                  >
+                    <DeleteOutlinedIcon fontSize="small" />
+                  </IconButton>
                 </Box>
               </Box>
             </Paper>
           ))}
         </>
       )}
+
+      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)}>
+        <DialogTitle>Delete Quiz?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            This will permanently delete this {deleteTarget?.num_questions}-question {deleteTarget?.quiz_type === "mcq" ? "multiple choice" : deleteTarget?.quiz_type === "short_answer" ? "short answer" : "flashcard"} quiz.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteTarget(null)}>Cancel</Button>
+          <Button onClick={handleDeleteQuiz} color="error" variant="contained">Delete</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

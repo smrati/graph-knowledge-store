@@ -156,6 +156,13 @@ async def quiz_result(quiz_id: str, session: AsyncSession = Depends(get_session)
     return _attempt_to_response(attempt)
 
 
+@router.delete("/{quiz_id}", status_code=204)
+async def delete_quiz(quiz_id: str, session: AsyncSession = Depends(get_session)):
+    deleted = await quiz_service.delete_quiz(session, quiz_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Quiz not found")
+
+
 @router.get("/{quiz_id}", response_model=QuizResponse)
 async def get_quiz(quiz_id: str, session: AsyncSession = Depends(get_session)):
     attempt = await quiz_service.get_quiz_attempt(session, quiz_id)

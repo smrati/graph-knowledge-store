@@ -284,6 +284,9 @@ export const api = {
   getActiveQuiz: () =>
     request<QuizActiveResponse | null>("/quiz/active/now"),
 
+  deleteQuiz: (quizId: string) =>
+    request<void>(`/quiz/${quizId}`, { method: "DELETE" }),
+
   getLLMStats: (fromDate?: string, toDate?: string) => {
     let path = "/llm-logs/stats";
     const params: string[] = [];
