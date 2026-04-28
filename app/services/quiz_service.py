@@ -48,6 +48,7 @@ RULES:
 - Wrong options (distractors) should be plausible but clearly incorrect to someone who understood the material
 - Include a brief explanation of why the correct answer is right
 - Questions should range from moderate to challenging
+- Use Unicode symbols (e.g. γ, β, α, ∑, √, ×) instead of LaTeX in all text
 
 You MUST respond with ONLY a JSON array. No markdown, no backticks, no commentary before or after.
 [
@@ -73,6 +74,7 @@ RULES:
 - Test COMPREHENSION, APPLICATION, and ANALYSIS — not regurgitation
 - Provide a model answer and 2-4 key points that a good answer should cover
 - Questions should range from moderate to challenging
+- Use Unicode symbols (e.g. γ, β, α, ∑, √, ×) instead of LaTeX in all text
 
 You MUST respond with ONLY a JSON array. No markdown, no backticks, no commentary before or after.
 [
@@ -93,6 +95,7 @@ RULES:
 - Hint: A brief clue that helps recall without giving away the answer
 - Cover KEY concepts, definitions, relationships, and important details
 - Prioritize the most important and testable knowledge
+- Use Unicode symbols (e.g. γ, β, α, ∑, √, ×) instead of LaTeX in all text
 
 You MUST respond with ONLY a JSON array. No markdown, no backticks, no commentary before or after.
 [
@@ -367,6 +370,16 @@ async def list_quiz_history(session: AsyncSession, limit: int = 20, offset: int 
     )
     result = await session.execute(stmt)
     return list(result.scalars().all())
+
+
+async def delete_quiz(session: AsyncSession, quiz_id: str) -> bool:
+    result = await session.execute(select(QuizAttempt).where(QuizAttempt.id == quiz_id))
+    attempt = result.scalar_one_or_none()
+    if not attempt:
+        return False
+    await session.delete(attempt)
+    await session.commit()
+    return True
 
 
 def _parse_json(raw: str) -> list[dict]:

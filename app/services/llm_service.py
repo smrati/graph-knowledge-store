@@ -74,7 +74,7 @@ def generate_title(content: str) -> str:
             messages=[
                 {
                     "role": "system",
-                    "content": "Generate a concise, descriptive title for the given article text. Return ONLY the title, nothing else. Maximum 100 characters. Do not use quotes.",
+                    "content": "Generate a concise, descriptive title for the given article text. Return ONLY the title, nothing else. Maximum 100 characters. Do not use quotes. Use Unicode symbols (e.g. γ, β, α, ∑, √, ×) instead of LaTeX (no $, no \\frac, no \\hat).",
                 },
                 {
                     "role": "user",

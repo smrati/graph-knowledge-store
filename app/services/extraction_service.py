@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 
 from app.services.llm_service import chat
 
@@ -24,28 +25,63 @@ Rules:
 - keywords: max 10 important specific terms
 - entities: named entities with their type
 - summary: concise, informative
+- Do NOT include backslashes, LaTeX, or escape sequences in string values
+- Use Unicode symbols (e.g. γ, β, α, ∑, √, ×) instead of LaTeX in all text fields
 
 Article:
 ---
 {content}"""
 
 
+def _fix_json_escapes(text: str) -> str:
+    def replace_inside_strings(match: re.Match) -> str:
+        s = match.group(0)
+        inner = s[1:-1]
+        inner = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', inner)
+        return '"' + inner + '"'
+    return re.sub(r'"(?:[^"\\]|\\.)*"', replace_inside_strings, text)
+
+
+def _extract_json(text: str) -> dict | None:
+    text = text.strip()
+    if text.startswith("```"):
+        first_newline = text.find("\n")
+        last_backtick = text.rfind("```")
+        if first_newline >= 0 and last_backtick > first_newline:
+            text = text[first_newline + 1:last_backtick].strip()
+
+    start = text.find("{")
+    end = text.rfind("}")
+    if start < 0 or end <= start:
+        return None
+
+    fragment = text[start:end + 1]
+
+    try:
+        return json.loads(fragment)
+    except json.JSONDecodeError:
+        pass
+
+    try:
+        return json.loads(_fix_json_escapes(fragment))
+    except json.JSONDecodeError as e:
+        logger.error("Extraction JSON parse failed even after escape fix: %s", e)
+        return None
+
+
 def extract_metadata(content: str) -> dict:
     prompt = EXTRACTION_PROMPT.format(content=content[:4000])
     try:
         raw = chat(prompt, system=EXTRACTION_SYSTEM)
-        text = raw.strip()
-        if text.startswith("```"):
-            first_newline = text.index("\n")
-            last_backtick = text.rindex("```")
-            text = text[first_newline + 1 : last_backtick].strip()
-        data = json.loads(text)
+        data = _extract_json(raw)
+        if not data:
+            return {"topics": [], "keywords": [], "entities": [], "summary": ""}
         return {
             "topics": data.get("topics", [])[:5],
             "keywords": data.get("keywords", [])[:10],
             "entities": data.get("entities", []),
             "summary": data.get("summary", ""),
         }
-    except (json.JSONDecodeError, Exception) as e:
-        logger.error(f"Extraction failed: {e}")
+    except Exception as e:
+        logger.error("Extraction failed: %s", e)
         return {"topics": [], "keywords": [], "entities": [], "summary": ""}
