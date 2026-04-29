@@ -125,7 +125,7 @@ export default function ArticleEditor() {
         sx={{ mb: 2 }}
       />
 
-      <MDEditor value={content} onChange={(v) => setContent(v || "")} height={500} />
+      <MDEditor value={content} onChange={(v) => setContent(v || "")} height={700} />
     </Box>
   );
 }
