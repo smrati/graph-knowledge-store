@@ -14,11 +14,12 @@ import Alert from "@mui/material/Alert";
 import SaveIcon from "@mui/icons-material/Save";
 import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
 import FunctionsIcon from "@mui/icons-material/Functions";
-import { enqueueSnackbar } from "notistack";
+import { useSnackbar } from "notistack";
 
 export default function ArticleEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { enqueueSnackbar } = useSnackbar();
   const isEditing = Boolean(id);
 
   const [title, setTitle] = useState("");
