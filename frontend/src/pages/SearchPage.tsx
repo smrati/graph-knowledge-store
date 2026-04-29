@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useSearchParams, Link } from "react-router-dom";
 import Fuse from "fuse.js";
 import { api, type ArticleIndexItem, type SearchResult } from "../api/client";
 import PaginationControls from "../components/PaginationControls";
@@ -23,8 +23,12 @@ import BoltOutlinedIcon from "@mui/icons-material/BoltOutlined";
 const DEFAULT_PAGE_SIZE = 10;
 
 export default function SearchPage() {
-  const [query, setQuery] = useState("");
-  const [mode, setMode] = useState<"semantic" | "hybrid">("semantic");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialQuery = searchParams.get("q") || "";
+  const initialMode = (searchParams.get("mode") as "semantic" | "hybrid") || "semantic";
+
+  const [query, setQuery] = useState(initialQuery);
+  const [mode, setMode] = useState<"semantic" | "hybrid">(initialMode);
   const [suggestions, setSuggestions] = useState<ArticleIndexItem[]>([]);
   const [allResults, setAllResults] = useState<SearchResult[]>([]);
   const [indexLoading, setIndexLoading] = useState(true);
@@ -34,7 +38,7 @@ export default function SearchPage() {
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [fuse, setFuse] = useState<InstanceType<typeof Fuse<ArticleIndexItem>> | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const navigate = useNavigate();
+  const initialSearchDone = useRef(false);
 
   useEffect(() => {
     api.getArticlesIndex().then((data) => {
@@ -54,6 +58,13 @@ export default function SearchPage() {
     });
   }, []);
 
+  useEffect(() => {
+    if (!initialSearchDone.current && initialQuery && fuse) {
+      initialSearchDone.current = true;
+      handleSearch();
+    }
+  }, [fuse]);
+
   function handleInputChange(value: string) {
     setQuery(value);
     setSearched(false);
@@ -68,13 +79,14 @@ export default function SearchPage() {
     }, 150);
   }
 
-  async function handleSearch(e: React.FormEvent) {
-    e.preventDefault();
+  async function handleSearch(e?: React.FormEvent) {
+    e?.preventDefault();
     if (!query.trim()) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setSuggestions([]);
     setSearching(true);
     setPage(1);
+    setSearchParams({ q: query, mode });
     try {
       const res = await api.search(query, 100, mode);
       setAllResults(res.results);
@@ -148,7 +160,7 @@ export default function SearchPage() {
           <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
             {suggestions.map((s) => (
               <Card key={s.id} variant="outlined">
-                <CardActionArea onClick={() => navigate(`/article/${s.id}`)} sx={{ p: 1.5 }}>
+                <CardActionArea component={Link} to={`/article/${s.id}`} sx={{ p: 1.5 }}>
                   <Typography variant="body2" sx={{ fontWeight: 500 }}>{s.title}</Typography>
                   {s.summary && (
                     <Typography variant="caption" color="text.secondary" sx={{
@@ -193,7 +205,7 @@ export default function SearchPage() {
           <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
             {pagedResults.map((r) => (
               <Card key={r.article.id} variant="outlined" sx={{ transition: "box-shadow 0.2s", "&:hover": { boxShadow: 2 } }}>
-                <CardActionArea onClick={() => navigate("/article/" + r.article.id)}>
+                <CardActionArea component={Link} to={"/article/" + r.article.id}>
                   <CardContent>
                     <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                       <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>{r.article.title}</Typography>

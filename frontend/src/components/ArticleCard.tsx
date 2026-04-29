@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import Card from "@mui/material/Card";
 import CardActionArea from "@mui/material/CardActionArea";
 import CardContent from "@mui/material/CardContent";
@@ -35,7 +35,7 @@ export default function ArticleCard({ article }: { article: ArticleListItem }) {
           "&:hover": { boxShadow: 4, transform: "translateY(-1px)" },
         }}
       >
-        <CardActionArea onClick={() => navigate(`/article/${article.id}`)}>
+        <CardActionArea component={Link} to={`/article/${article.id}`}>
           <CardContent sx={{ pb: 1 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 600 }} gutterBottom>
               {article.title}

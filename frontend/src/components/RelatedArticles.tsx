@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import Typography from "@mui/material/Typography";
 import List from "@mui/material/List";
@@ -21,7 +21,6 @@ interface Neighbor {
 export default function RelatedArticles({ articleId }: { articleId: string }) {
   const [neighbors, setNeighbors] = useState<Neighbor[]>([]);
   const [loading, setLoading] = useState(true);
-  const navigate = useNavigate();
 
   useEffect(() => {
     api.getNeighbors(articleId, 5)
@@ -57,7 +56,8 @@ export default function RelatedArticles({ articleId }: { articleId: string }) {
         {neighbors.map((n) => (
           <ListItem key={n.id} disablePadding sx={{ mb: 0.5 }}>
             <ListItemButton
-              onClick={() => navigate(`/article/${n.id}`)}
+              component={Link}
+              to={`/article/${n.id}`}
               sx={{ borderRadius: 1 }}
             >
               <ListItemText

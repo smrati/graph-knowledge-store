@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { api, type ChatSessionResponse, type ChatMessageResponse } from "../api/client";
 import MarkdownPreview from "../components/MarkdownPreview";
 import Typography from "@mui/material/Typography";
@@ -29,7 +29,6 @@ interface LocalMessage {
 }
 
 export default function ChatPage() {
-  const navigate = useNavigate();
   const { enqueueSnackbar } = useSnackbar();
   const [sessions, setSessions] = useState<ChatSessionResponse[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -250,7 +249,8 @@ export default function ChatPage() {
                               size="small"
                               variant="outlined"
                               clickable
-                              onClick={() => navigate(`/article/${s.id}`)}
+                              component={Link}
+                              to={`/article/${s.id}`}
                               sx={{ maxWidth: 200 }}
                             />
                           ))}

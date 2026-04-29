@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import Fuse from "fuse.js";
 import ForceGraph2D, { type ForceGraphMethods, type NodeObject } from "react-force-graph-2d";
 import { api, type ArticleIndexItem, type GraphNode, type GraphEdge, type GraphStats } from "../api/client";
@@ -60,7 +60,6 @@ export default function GraphPage() {
   const [fuse, setFuse] = useState<InstanceType<typeof Fuse<ArticleIndexItem>> | null>(null);
   const [indexLoading, setIndexLoading] = useState(true);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const navigate = useNavigate();
 
   useEffect(() => {
     api.getArticlesIndex().then((data) => {
@@ -202,7 +201,7 @@ export default function GraphPage() {
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
           <AccountTreeOutlinedIcon color="primary" fontSize="small" />
           <Typography variant="body2" sx={{ fontWeight: 500 }}>{selectedTitle}</Typography>
-          <Button size="small" onClick={() => navigate(`/article/${selectedId}`)}>View article</Button>
+          <Button size="small" component={Link} to={`/article/${selectedId}`}>View article</Button>
         </Box>
       )}
 
