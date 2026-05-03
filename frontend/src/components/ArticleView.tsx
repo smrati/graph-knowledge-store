@@ -22,6 +22,7 @@ import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
 import ContentCopyOutlinedIcon from "@mui/icons-material/ContentCopyOutlined";
 import CheckOutlinedIcon from "@mui/icons-material/CheckOutlined";
 import QuizOutlinedIcon from "@mui/icons-material/QuizOutlined";
+import SchoolOutlinedIcon from "@mui/icons-material/SchoolOutlined";
 import CheckBoxOutlinedIcon from "@mui/icons-material/CheckBoxOutlined";
 import EditNoteOutlinedIcon from "@mui/icons-material/EditNoteOutlined";
 import StyleOutlinedIcon from "@mui/icons-material/StyleOutlined";
@@ -88,6 +89,13 @@ export default function ArticleView() {
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", mb: 2 }}>
         <Typography variant="h4" sx={{ fontWeight: 700, flex: 1, pr: 2 }}>{article.title}</Typography>
         <Box sx={{ display: "flex", gap: 1, flexShrink: 0 }}>
+          <Button
+            variant="outlined"
+            startIcon={<SchoolOutlinedIcon />}
+            onClick={() => navigate(`/study?article=${article.id}`)}
+          >
+            Study
+          </Button>
           <Button
             variant="outlined"
             startIcon={quizLoading ? <CircularProgress size={16} /> : <QuizOutlinedIcon />}

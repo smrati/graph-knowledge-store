@@ -19,6 +19,7 @@ import AddBoxOutlinedIcon from "@mui/icons-material/AddBoxOutlined";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 import QuizOutlinedIcon from "@mui/icons-material/QuizOutlined";
+import SchoolOutlinedIcon from "@mui/icons-material/SchoolOutlined";
 import SmartToyOutlinedIcon from "@mui/icons-material/SmartToyOutlined";
 import MonitorHeartOutlinedIcon from "@mui/icons-material/MonitorHeartOutlined";
 import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
@@ -36,6 +37,7 @@ const NAV_ITEMS = [
   { to: "/search", label: "Search", icon: <SearchOutlinedIcon />, end: false },
   { to: "/graph", label: "Graph", icon: <AccountTreeOutlinedIcon />, end: false },
   { to: "/quiz", label: "Quiz", icon: <QuizOutlinedIcon />, end: false },
+  { to: "/study", label: "Study", icon: <SchoolOutlinedIcon />, end: false },
   { to: "/chat", label: "Ask AI", icon: <SmartToyOutlinedIcon />, end: false },
   { to: "/llm-monitor", label: "LLM Monitor", icon: <MonitorHeartOutlinedIcon />, end: false },
 ];
@@ -49,6 +51,7 @@ export default function Layout() {
     try { return localStorage.getItem("sidebar-collapsed") === "true"; } catch { return false; }
   });
   const [quizGenerating, setQuizGenerating] = useState(false);
+  const [studyDue, setStudyDue] = useState(0);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const notifiedRef = useRef<string | null>(null);
   const location = useLocation();
@@ -126,6 +129,10 @@ export default function Layout() {
     };
   }, [location.pathname, enqueueSnackbar, closeSnackbar, navigate]);
 
+  useEffect(() => {
+    api.getDueCount().then((res) => setStudyDue(res.due_now + res.new)).catch(() => {});
+  }, [location.pathname]);
+
   return (
     <Box sx={{ display: "flex", minHeight: "100vh" }}>
       <Drawer
@@ -160,6 +167,7 @@ export default function Layout() {
         <List sx={{ px: 1, pt: 0.5 }}>
           {NAV_ITEMS.map(({ to, label, icon, end }) => {
             const isQuiz = to === "/quiz";
+            const isStudy = to === "/study";
             return (
               <ListItem key={to} disablePadding sx={{ mb: 0.5 }}>
                 <Tooltip title={collapsed ? label : ""} arrow placement="right">
@@ -187,6 +195,15 @@ export default function Layout() {
                           variant="dot"
                           invisible={!quizGenerating}
                           sx={{ "& .MuiBadge-badge": { top: -2, right: -4 } }}
+                        >
+                          {icon}
+                        </Badge>
+                      ) : isStudy ? (
+                        <Badge
+                          color="error"
+                          badgeContent={studyDue}
+                          invisible={studyDue === 0}
+                          sx={{ "& .MuiBadge-badge": { top: -4, right: -8 } }}
                         >
                           {icon}
                         </Badge>

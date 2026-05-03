@@ -172,6 +172,13 @@ async def _enrich_article(article_id: uuid.UUID, title: str, content: str) -> No
                 partial(sync_article_to_graph, article_id, title, metadata["topics"], metadata["keywords"], metadata["entities"]),
             )
 
+            if settings.flashcard_auto_generate:
+                try:
+                    from app.services.flashcard_service import generate_flashcards_for_article
+                    await generate_flashcards_for_article(session, article_id)
+                except Exception as fe:
+                    logger.warning("Flashcard auto-generation failed for %s: %s", article_id, fe)
+
             logger.info(f"Article {article_id} enriched, embedded, and synced to graph")
         except Exception as e:
             logger.error(f"Enrichment failed for article {article_id}: {e}")

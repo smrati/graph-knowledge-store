@@ -83,6 +83,49 @@ export interface GraphStats {
 
 export type QuizType = "mcq" | "short_answer" | "flashcard";
 
+export interface FlashcardData {
+  id: string;
+  article_id: string;
+  front: string;
+  back: string;
+  hint: string | null;
+  state: "new" | "learning" | "review" | "relearning";
+  due: string | null;
+  interval: number;
+  ease_factor: number;
+  step: number;
+  repetitions: number;
+  lapses: number;
+  last_review: string | null;
+  last_rating: number | null;
+  created_at: string;
+}
+
+export interface DeckInfo {
+  article_id: string;
+  title: string;
+  total: number;
+  new: number;
+  learning: number;
+  review: number;
+  relearning: number;
+  mature: number;
+  due_now: number;
+}
+
+export interface StudyStats {
+  total_cards: number;
+  new_cards: number;
+  learning: number;
+  review: number;
+  relearning: number;
+  due_now: number;
+  reviews_today: number;
+  correct_today: number;
+  retention_rate: number;
+  streak_days: number;
+}
+
 export interface McqOption {
   label: string;
   text: string;
@@ -380,4 +423,31 @@ export const api = {
       }
     }
   },
+
+  getStudyStats: () =>
+    request<StudyStats>("/study/stats"),
+
+  getDueCards: (limit = 50) =>
+    request<FlashcardData[]>(`/study/due?limit=${limit}`),
+
+  getNewCards: () =>
+    request<FlashcardData[]>("/study/new"),
+
+  submitReview: (cardId: string, rating: number) =>
+    request<FlashcardData>(`/study/review/${cardId}`, { method: "POST", body: JSON.stringify({ rating }) }),
+
+  getDecks: () =>
+    request<DeckInfo[]>("/study/decks"),
+
+  getDeckCards: (articleId: string) =>
+    request<FlashcardData[]>(`/study/deck/${articleId}`),
+
+  generateFlashcards: (articleId: string) =>
+    request<{ generated: number }>(`/study/generate/${articleId}`, { method: "POST" }),
+
+  generateMoreFlashcards: (articleId: string, n = 5) =>
+    request<{ generated: number }>(`/study/generate-more/${articleId}?n=${n}`, { method: "POST" }),
+
+  getDueCount: () =>
+    request<{ due_now: number; new: number }>("/study/due-count"),
 };

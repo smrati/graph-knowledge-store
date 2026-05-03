@@ -21,6 +21,17 @@ class Settings(BaseSettings):
     llm_num_ctx: int = 32000
     llm_quiz_num_ctx: int = 64000
 
+    flashcard_auto_generate: bool = True
+    flashcard_auto_count: int = 8
+    flashcard_daily_new_limit: int = 10
+    flashcard_learning_steps: str = "1,10"
+    flashcard_relearning_steps: str = "10"
+    flashcard_graduating_interval: int = 1
+    flashcard_easy_interval: int = 4
+    flashcard_easy_bonus: float = 1.3
+    flashcard_maximum_interval: int = 365
+    flashcard_minimum_ease: float = 1.3
+
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"
     neo4j_password: str = "password123"

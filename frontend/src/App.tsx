@@ -7,6 +7,7 @@ import ArticlePage from "./pages/ArticlePage";
 import SearchPage from "./pages/SearchPage";
 import GraphPage from "./pages/GraphPage";
 import QuizPage from "./pages/QuizPage";
+import StudyPage from "./pages/StudyPage";
 import ChatPage from "./pages/ChatPage";
 import LLMDashboardPage from "./pages/LLMDashboardPage";
 
@@ -23,6 +24,7 @@ export default function App() {
             <Route path="/search" element={<SearchPage />} />
             <Route path="/graph" element={<GraphPage />} />
             <Route path="/quiz" element={<QuizPage />} />
+            <Route path="/study" element={<StudyPage />} />
             <Route path="/chat" element={<ChatPage />} />
             <Route path="/llm-monitor" element={<LLMDashboardPage />} />
           </Route>

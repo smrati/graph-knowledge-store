@@ -1,0 +1,244 @@
+import json
+import logging
+import re
+import uuid
+
+from sqlalchemy import delete as sql_delete
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.config import settings
+from app.models.flashcard import Flashcard
+from app.services.llm_service import chat
+
+logger = logging.getLogger(__name__)
+
+FLASHCARD_SYSTEM = """You are a JSON-only API. You output valid JSON arrays and nothing else. No prose. No markdown. No numbered lists. No explanation. Just JSON.
+
+Generate exactly {n} flashcard(s) from the given article.
+
+RULES:
+- Front: A concept name, term, or focused question (concise, 1-2 lines max)
+- Back: A clear, complete explanation (2-4 sentences)
+- Hint: A brief clue that helps recall without giving away the answer
+- Cover KEY concepts, definitions, relationships, and important details
+- Prioritize the most important and testable knowledge
+- Use Unicode symbols (e.g. γ, β, α, ∑, √, ×) instead of LaTeX in all text
+
+Output format — respond with ONLY this JSON structure, no other text:
+[
+  {{
+    "front": "string",
+    "back": "string",
+    "hint": "string"
+  }}
+]
+
+IMPORTANT: Your entire response must start with [ and end with ]. Do not include any text before or after the JSON array."""
+
+FLASHCARD_PROMPT = """ARTICLE TITLE: {title}
+
+ARTICLE CONTENT:
+{content}
+
+EXISTING CARDS (do NOT duplicate these concepts):
+{existing}
+
+Remember: respond with ONLY a JSON array. Start with [ and end with ]. No other text."""
+
+
+def _fix_latex_json_escapes(text: str) -> str:
+    def fix_inside_strings(match: re.Match) -> str:
+        s = match.group(0)
+        inner = s[1:-1]
+        inner = re.sub(r'\\([bfnrt])(?=[a-zA-Z{])', r'\\\\\1', inner)
+        inner = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', inner)
+        return '"' + inner + '"'
+    return re.sub(r'"(?:[^"\\]|\\.)*"', fix_inside_strings, text)
+
+
+def _parse_json(raw: str) -> list[dict]:
+    text = raw.strip()
+    cleaned = text
+    if cleaned.startswith("```"):
+        lines = cleaned.split("\n")
+        lines = [l for l in lines if not l.strip().startswith("```")]
+        cleaned = "\n".join(lines).strip()
+
+    def _try_parse(s: str) -> list[dict] | None:
+        for attempt_text in (_fix_latex_json_escapes(s), s):
+            try:
+                parsed = json.loads(attempt_text)
+                if isinstance(parsed, list):
+                    return parsed
+                if isinstance(parsed, dict):
+                    return [parsed]
+            except (json.JSONDecodeError, ValueError):
+                continue
+        return None
+
+    if cleaned.startswith("[") or cleaned.startswith("{"):
+        result = _try_parse(cleaned)
+        if result is not None:
+            return result
+
+    start = cleaned.find("[")
+    end = cleaned.rfind("]")
+    if start >= 0 and end > start:
+        result = _try_parse(cleaned[start:end + 1])
+        if result is not None:
+            return result
+
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start >= 0 and end > start:
+        result = _try_parse(cleaned[start:end + 1])
+        if result is not None:
+            return result
+
+    logger.error("Flashcard LLM returned unparseable output (first 500 chars): %s", text[:500])
+    return []
+
+
+def _is_duplicate(front: str, existing_fronts: list[str]) -> bool:
+    front_lower = front.lower().strip()
+    for existing in existing_fronts:
+        existing_lower = existing.lower().strip()
+        if front_lower == existing_lower:
+            return True
+        shorter, longer = sorted([front_lower, existing_lower], key=len)
+        if len(shorter) > 15 and shorter in longer:
+            return True
+    return False
+
+
+def generate_flashcards_sync(
+    article_id: str,
+    title: str,
+    content: str,
+    n: int,
+    existing_fronts: list[str] | None = None,
+) -> list[dict]:
+    existing = existing_fronts or []
+    existing_section = "\n".join(f'- "{f}"' for f in existing) if existing else "(none)"
+
+    system = FLASHCARD_SYSTEM.format(n=n)
+    prompt = FLASHCARD_PROMPT.format(title=title, content=content, existing=existing_section)
+
+    num_ctx = min(len(content) + 2000, settings.llm_quiz_num_ctx)
+    raw = chat(prompt, system, num_ctx=num_ctx, article_id=str(article_id))
+    parsed = _parse_json(raw)
+
+    cards = []
+    for item in parsed:
+        front = item.get("front", "").strip()
+        back = item.get("back", "").strip()
+        hint = item.get("hint", "").strip()
+        if not front or not back:
+            continue
+        if _is_duplicate(front, existing + [c["front"] for c in cards]):
+            continue
+        cards.append({"front": front, "back": back, "hint": hint})
+
+    if not cards and parsed:
+        logger.warning("Flashcard generation: all %d cards were duplicates for article %s", len(parsed), article_id)
+
+    return cards
+
+
+async def generate_flashcards_for_article(
+    session: AsyncSession,
+    article_id: uuid.UUID,
+    n: int | None = None,
+) -> int:
+    from app.models.article import Article
+
+    result = await session.execute(select(Article).where(Article.id == article_id))
+    article = result.scalar_one_or_none()
+    if not article:
+        return 0
+
+    count = n or settings.flashcard_auto_count
+
+    existing_result = await session.execute(
+        select(Flashcard.front).where(Flashcard.article_id == article_id)
+    )
+    existing_fronts = [row[0] for row in existing_result.all()]
+
+    from asyncio import get_running_loop
+    from functools import partial
+
+    loop = get_running_loop()
+    cards = await loop.run_in_executor(
+        None,
+        partial(
+            generate_flashcards_sync,
+            str(article_id), article.title, article.content, count, existing_fronts,
+        ),
+    )
+
+    for card_data in cards:
+        flashcard = Flashcard(
+            article_id=article_id,
+            front=card_data["front"],
+            back=card_data["back"],
+            hint=card_data.get("hint", ""),
+        )
+        session.add(flashcard)
+
+    await session.commit()
+    logger.info("Generated %d flashcards for article %s", len(cards), article_id)
+    return len(cards)
+
+
+async def regenerate_flashcards(session: AsyncSession, article_id: uuid.UUID) -> int:
+    await session.execute(
+        sql_delete(Flashcard).where(Flashcard.article_id == article_id)
+    )
+    await session.commit()
+    return await generate_flashcards_for_article(session, article_id)
+
+
+async def get_flashcards_for_article(
+    session: AsyncSession, article_id: uuid.UUID,
+) -> list[Flashcard]:
+    result = await session.execute(
+        select(Flashcard)
+        .where(Flashcard.article_id == article_id)
+        .order_by(Flashcard.created_at)
+    )
+    return list(result.scalars().all())
+
+
+async def get_flashcard_counts(session: AsyncSession) -> dict:
+    total = (await session.execute(select(func.count()).select_from(Flashcard))).scalar() or 0
+    new = (await session.execute(
+        select(func.count()).select_from(Flashcard).where(Flashcard.state == "new")
+    )).scalar() or 0
+    learning = (await session.execute(
+        select(func.count()).select_from(Flashcard).where(Flashcard.state == "learning")
+    )).scalar() or 0
+    review = (await session.execute(
+        select(func.count()).select_from(Flashcard).where(Flashcard.state == "review")
+    )).scalar() or 0
+    relearning = (await session.execute(
+        select(func.count()).select_from(Flashcard).where(Flashcard.state == "relearning")
+    )).scalar() or 0
+
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    due_now = (await session.execute(
+        select(func.count()).select_from(Flashcard).where(
+            Flashcard.state.in_(["learning", "relearning", "review"]),
+            Flashcard.due <= now,
+        )
+    )).scalar() or 0
+
+    return {
+        "total": total,
+        "new": new,
+        "learning": learning,
+        "review": review,
+        "relearning": relearning,
+        "due_now": due_now,
+    }
