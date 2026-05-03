@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,6 +36,11 @@ class FlashcardOut(BaseModel):
     last_review: datetime | None
     last_rating: int | None
     created_at: datetime
+
+    @field_validator("article_id", mode="before")
+    @classmethod
+    def coerce_article_id(cls, v: object) -> str:
+        return str(v)
 
     model_config = {"from_attributes": True}
 
@@ -233,6 +238,12 @@ async def get_decks(session: AsyncSession = Depends(get_session)):
                 mature=row.mature,
                 due_now=row.due_now,
             ))
+        else:
+            decks.append(DeckInfo(
+                article_id=article_id,
+                title=title,
+                total=0, new=0, learning=0, review=0, relearning=0, mature=0, due_now=0,
+            ))
     return decks
 
 
@@ -264,6 +275,33 @@ async def generate_more_cards(
         session, uuid.UUID(article_id), n=n,
     )
     return {"generated": count}
+
+
+@router.post("/generate-all-missing")
+async def generate_all_missing(session: AsyncSession = Depends(get_session)):
+    articles_with_cards = (await session.execute(
+        select(Flashcard.article_id).distinct()
+    )).scalars().all()
+    articles_with_cards_set = {str(a) for a in articles_with_cards}
+
+    all_articles = (await session.execute(
+        select(Article.id, Article.title, Article.content).order_by(Article.updated_at.desc())
+    )).all()
+
+    generated = 0
+    errors = 0
+    for article_id, title, content in all_articles:
+        if str(article_id) in articles_with_cards_set:
+            continue
+        try:
+            count = await flashcard_service.generate_flashcards_for_article(session, article_id)
+            generated += count
+        except Exception as e:
+            errors += 1
+            import logging
+            logging.getLogger(__name__).warning("Failed to generate flashcards for %s: %s", article_id, e)
+
+    return {"generated": generated, "errors": errors, "articles_processed": len(all_articles) - len(articles_with_cards_set)}
 
 
 @router.get("/due-count")

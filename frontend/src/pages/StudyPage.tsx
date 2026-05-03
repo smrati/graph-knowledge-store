@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useSnackbar } from "notistack";
 import { api, type FlashcardData, type DeckInfo, type StudyStats } from "../api/client";
 import LatexText from "../components/LatexText";
@@ -15,6 +15,7 @@ import Tooltip from "@mui/material/Tooltip";
 import RefreshOutlinedIcon from "@mui/icons-material/RefreshOutlined";
 import ArrowBackOutlinedIcon from "@mui/icons-material/ArrowBackOutlined";
 import SchoolOutlinedIcon from "@mui/icons-material/SchoolOutlined";
+import QuizOutlinedIcon from "@mui/icons-material/QuizOutlined";
 
 type View = "overview" | "session" | "summary";
 
@@ -54,6 +55,7 @@ function getNextInterval(card: FlashcardData, rating: number): string {
 
 export default function StudyPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const articleFilter = searchParams.get("article");
 
   const [view, setView] = useState<View>("overview");
@@ -68,6 +70,8 @@ export default function StudyPage() {
   const [reviewed, setReviewed] = useState(0);
   const [correct, setCorrect] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [generatingAll, setGeneratingAll] = useState(false);
+  const [generatingDeck, setGeneratingDeck] = useState<string | null>(null);
   const { enqueueSnackbar } = useSnackbar();
 
   const loadData = useCallback(async () => {
@@ -132,6 +136,30 @@ export default function StudyPage() {
     } catch {
       enqueueSnackbar("Failed to load cards", { variant: "error" });
     }
+  }
+
+  async function handleGenerateAll() {
+    setGeneratingAll(true);
+    try {
+      const res = await api.generateAllMissingFlashcards();
+      enqueueSnackbar(`Generated ${res.generated} flashcards across ${res.articles_processed} articles`, { variant: "success", autoHideDuration: 5000 });
+      loadData();
+    } catch {
+      enqueueSnackbar("Failed to generate flashcards", { variant: "error" });
+    }
+    setGeneratingAll(false);
+  }
+
+  async function handleGenerateDeck(articleId: string) {
+    setGeneratingDeck(articleId);
+    try {
+      const res = await api.generateFlashcards(articleId);
+      enqueueSnackbar(`Generated ${res.generated} flashcards`, { variant: "success" });
+      loadData();
+    } catch {
+      enqueueSnackbar("Failed to generate flashcards", { variant: "error" });
+    }
+    setGeneratingDeck(null);
   }
 
   async function handleRate(rating: number) {
@@ -363,18 +391,44 @@ export default function StudyPage() {
           fullWidth
           startIcon={<SchoolOutlinedIcon />}
           onClick={startStudy}
-          sx={{ mb: 3, py: 1.5, borderRadius: 2 }}
+          sx={{ mb: 1.5, py: 1.5, borderRadius: 2 }}
         >
           Start Study Session ({stats.due_now} due + {stats.new_cards} new)
         </Button>
       )}
 
-      <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1.5 }}>Article Decks</Typography>
+      {stats && stats.total_cards > 0 && (
+        <Button
+          variant="outlined"
+          size="large"
+          fullWidth
+          startIcon={<QuizOutlinedIcon />}
+          onClick={() => navigate("/quiz")}
+          sx={{ mb: 3, py: 1.5, borderRadius: 2 }}
+        >
+          Quiz Weak Areas
+        </Button>
+      )}
+
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5 }}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>Article Decks</Typography>
+        {decks.some((d) => d.total === 0) && (
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={generatingAll ? <CircularProgress size={14} /> : <SchoolOutlinedIcon />}
+            onClick={handleGenerateAll}
+            disabled={generatingAll}
+          >
+            {generatingAll ? "Generating..." : "Generate All Missing"}
+          </Button>
+        )}
+      </Box>
 
       {decks.length === 0 && (
         <Paper sx={{ p: 4, textAlign: "center", borderRadius: 3 }}>
           <Typography color="text.secondary">
-            No flashcards yet. Flashcards are auto-generated when you add articles.
+            No articles yet. Add articles and flashcards will be auto-generated.
           </Typography>
         </Paper>
       )}
@@ -390,27 +444,41 @@ export default function StudyPage() {
               <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
                 {deck.title}
               </Typography>
-              <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", mb: 1 }}>
-                {deck.new > 0 && <Chip label={`${deck.new} new`} size="small" variant="outlined" color="info" />}
-                {deck.learning > 0 && <Chip label={`${deck.learning} learning`} size="small" variant="outlined" color="warning" />}
-                {deck.review > 0 && <Chip label={`${deck.review} review`} size="small" variant="outlined" color="primary" />}
-                {deck.mature > 0 && <Chip label={`${deck.mature} mature`} size="small" variant="outlined" color="success" />}
-              </Box>
-              {deck.total > 0 && (
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                  <LinearProgress
-                    variant="determinate"
-                    value={deck.total > 0 ? (deck.mature / deck.total) * 100 : 0}
-                    sx={{ flex: 1, borderRadius: 2, height: 6 }}
-                  />
-                  <Typography variant="caption" color="text.secondary">
-                    {Math.round((deck.mature / deck.total) * 100)}% mastered
-                  </Typography>
-                </Box>
+              {deck.total > 0 ? (
+                <>
+                  <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", mb: 1 }}>
+                    {deck.new > 0 && <Chip label={`${deck.new} new`} size="small" variant="outlined" color="info" />}
+                    {deck.learning > 0 && <Chip label={`${deck.learning} learning`} size="small" variant="outlined" color="warning" />}
+                    {deck.review > 0 && <Chip label={`${deck.review} review`} size="small" variant="outlined" color="primary" />}
+                    {deck.mature > 0 && <Chip label={`${deck.mature} mature`} size="small" variant="outlined" color="success" />}
+                  </Box>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <LinearProgress
+                      variant="determinate"
+                      value={(deck.mature / deck.total) * 100}
+                      sx={{ flex: 1, borderRadius: 2, height: 6 }}
+                    />
+                    <Typography variant="caption" color="text.secondary">
+                      {Math.round((deck.mature / deck.total) * 100)}% mastered
+                    </Typography>
+                  </Box>
+                </>
+              ) : (
+                <Typography variant="caption" color="text.disabled">No flashcards yet</Typography>
               )}
             </Box>
             <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
-              {deck.due_now > 0 ? (
+              {deck.total === 0 ? (
+                <Button
+                  variant="outlined"
+                  size="small"
+                  disabled={generatingDeck === deck.article_id}
+                  startIcon={generatingDeck === deck.article_id ? <CircularProgress size={14} /> : <SchoolOutlinedIcon />}
+                  onClick={() => handleGenerateDeck(deck.article_id)}
+                >
+                  {generatingDeck === deck.article_id ? "Generating..." : "Generate"}
+                </Button>
+              ) : deck.due_now > 0 ? (
                 <Button variant="contained" size="small" onClick={() => startDeckStudy(deck.article_id)}>
                   Study ({deck.due_now} due)
                 </Button>
@@ -423,23 +491,17 @@ export default function StudyPage() {
                   All caught up!
                 </Typography>
               )}
-              <Tooltip title="Regenerate flashcards">
-                <IconButton
-                  size="small"
-                  onClick={async () => {
-                    try {
-                      const res = await api.generateFlashcards(deck.article_id);
-                      enqueueSnackbar(`Generated ${res.generated} new cards`, { variant: "success" });
-                      loadData();
-                    } catch {
-                      enqueueSnackbar("Failed to generate cards", { variant: "error" });
-                    }
-                  }}
-                  sx={{ color: "text.disabled", "&:hover": { color: "primary.main" } }}
-                >
-                  <RefreshOutlinedIcon fontSize="small" />
-                </IconButton>
-              </Tooltip>
+              {deck.total > 0 && (
+                <Tooltip title="Regenerate flashcards">
+                  <IconButton
+                    size="small"
+                    onClick={() => handleGenerateDeck(deck.article_id)}
+                    sx={{ color: "text.disabled", "&:hover": { color: "primary.main" } }}
+                  >
+                    <RefreshOutlinedIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+              )}
             </Box>
           </Box>
         </Paper>

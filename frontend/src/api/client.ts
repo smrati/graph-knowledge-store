@@ -329,6 +329,9 @@ export const api = {
   generateArticleQuiz: (articleId: string, data: { quiz_type: QuizType; num_questions: number }) =>
     request<QuizGenerateResponse>(`/quiz/generate/article/${articleId}`, { method: "POST", body: JSON.stringify(data) }),
 
+  generateWeakAreasQuiz: (quizType: string, numQuestions = 5) =>
+    request<QuizGenerateResponse>("/quiz/generate/weak", { method: "POST", body: JSON.stringify({ quiz_type: quizType, num_questions: numQuestions }) }),
+
   getQuizStatus: (quizId: string) =>
     request<QuizStatusResponse>(`/quiz/status/${quizId}`),
 
@@ -447,6 +450,9 @@ export const api = {
 
   generateMoreFlashcards: (articleId: string, n = 5) =>
     request<{ generated: number }>(`/study/generate-more/${articleId}?n=${n}`, { method: "POST" }),
+
+  generateAllMissingFlashcards: () =>
+    request<{ generated: number; errors: number; articles_processed: number }>("/study/generate-all-missing", { method: "POST" }),
 
   getDueCount: () =>
     request<{ due_now: number; new: number }>("/study/due-count"),

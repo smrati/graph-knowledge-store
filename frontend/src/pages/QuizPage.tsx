@@ -34,6 +34,7 @@ import QuizOutlinedIcon from "@mui/icons-material/QuizOutlined";
 import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
 import AccessTimeOutlinedIcon from "@mui/icons-material/AccessTimeOutlined";
 import DeleteOutlinedIcon from "@mui/icons-material/DeleteOutlined";
+import SchoolOutlinedIcon from "@mui/icons-material/SchoolOutlined";
 import DeleteSweepOutlinedIcon from "@mui/icons-material/DeleteSweepOutlined";
 import DoneAllOutlinedIcon from "@mui/icons-material/DoneAllOutlined";
 
@@ -326,6 +327,28 @@ export default function QuizPage() {
     }
   }
 
+  async function handleWeakAreas() {
+    setError("");
+    setQuiz(null);
+    setQuizId(null);
+    setStatus(null);
+    setProgress(0);
+    setTotal(0);
+    setReviewQuiz(null);
+
+    try {
+      const res = await api.generateWeakAreasQuiz("mcq", numQuestions);
+      setQuizId(res.quiz_id);
+      setStatus(res.status);
+      setProgress(0);
+      setTotal(numQuestions);
+      localStorage.setItem(ACTIVE_QUIZ_KEY, res.quiz_id);
+      startPolling(res.quiz_id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to start weak areas quiz");
+    }
+  }
+
   async function handleComplete(answers: QuizAnswer[], score: number) {
     if (!quiz) return;
     try {
@@ -536,10 +559,25 @@ export default function QuizPage() {
             startIcon={isGenerating ? <CircularProgress size={18} color="inherit" /> : <QuizOutlinedIcon />}
             onClick={handleGenerate}
             disabled={isGenerating || (!selectedTopics.length && !selectedKeywords.length)}
-            sx={{ py: 1.5, borderRadius: 2 }}
+            sx={{ py: 1.5, borderRadius: 2, mb: 1.5 }}
           >
             {isGenerating ? `Generating (${progress}/${total})...` : "Generate Quiz"}
           </Button>
+
+          <Button
+            variant="outlined"
+            size="large"
+            fullWidth
+            startIcon={isGenerating ? <CircularProgress size={18} /> : <SchoolOutlinedIcon />}
+            onClick={handleWeakAreas}
+            disabled={isGenerating}
+            sx={{ py: 1.5, borderRadius: 2 }}
+          >
+            {isGenerating ? "Generating..." : "Quiz Weak Areas"}
+          </Button>
+          <Typography variant="caption" color="text.disabled" sx={{ display: "block", mt: 1, textAlign: "center" }}>
+            Generates MCQs focused on flashcard concepts you struggle with most
+          </Typography>
         </>
       )}
 
@@ -630,11 +668,17 @@ export default function QuizPage() {
                               </Typography>
                             </Typography>
                             <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", mt: 0.5 }}>
-                              {item.topics.slice(0, 3).map((t) => (
-                                <Chip key={t} label={t} size="small" variant="outlined" color="primary" />
-                              ))}
-                              {item.topics.length > 3 && (
-                                <Chip label={`+${item.topics.length - 3}`} size="small" variant="outlined" />
+                              {item.topics[0] === "weak-areas" ? (
+                                <Chip label="Weak Areas" size="small" variant="outlined" color="warning" />
+                              ) : (
+                                <>
+                                  {item.topics.slice(0, 3).map((t) => (
+                                    <Chip key={t} label={t} size="small" variant="outlined" color="primary" />
+                                  ))}
+                                  {item.topics.length > 3 && (
+                                    <Chip label={`+${item.topics.length - 3}`} size="small" variant="outlined" />
+                                  )}
+                                </>
                               )}
                             </Box>
                           </Box>

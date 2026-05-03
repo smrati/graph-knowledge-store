@@ -15,6 +15,7 @@ from app.schemas.quiz import (
     QuizResponse,
     QuizStatusResponse,
     QuizSubmitRequest,
+    WeakAreasRequest,
 )
 from app.services import quiz_service
 
@@ -79,6 +80,44 @@ async def generate_article_quiz(
 
     quiz_id = attempt.id
     asyncio.create_task(quiz_service.run_generation(quiz_id, articles))
+
+    return QuizGenerateResponse(quiz_id=quiz_id, status="generating")
+
+
+@router.post("/generate/weak", response_model=QuizGenerateResponse)
+async def generate_weak_areas_quiz(
+    req: WeakAreasRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    from app.models.flashcard import Flashcard
+    from sqlalchemy import func as sql_func
+
+    reviewed_count = (await session.execute(
+        sql_func.count().select_from(Flashcard).where(Flashcard.state != "new")
+    )).scalar() or 0
+
+    if reviewed_count == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="No reviewed flashcards found. Study some flashcards first to identify weak areas.",
+        )
+
+    n = req.num_questions
+
+    attempt = QuizAttempt(
+        quiz_type=req.quiz_type,
+        topics=["weak-areas"],
+        keywords=[],
+        num_questions=n,
+        article_count=0,
+        status="generating",
+    )
+    session.add(attempt)
+    await session.commit()
+    await session.refresh(attempt)
+
+    quiz_id = attempt.id
+    asyncio.create_task(quiz_service.run_weak_areas_generation(quiz_id))
 
     return QuizGenerateResponse(quiz_id=quiz_id, status="generating")
 
@@ -221,6 +260,7 @@ def _attempt_to_response(a: QuizAttempt) -> QuizResponse:
         score=a.score,
         total=a.num_questions,
         status=a.status,
+        source_flashcard_ids=a.source_flashcard_ids,
         created_at=a.created_at,
         completed_at=a.completed_at,
     )

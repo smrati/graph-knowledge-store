@@ -15,6 +15,11 @@ class ArticleQuizRequest(BaseModel):
     num_questions: int = Field(default=5, ge=1, le=15)
 
 
+class WeakAreasRequest(BaseModel):
+    quiz_type: str = Field(pattern="^(mcq|short_answer)$")
+    num_questions: int = Field(default=5, ge=3, le=15)
+
+
 class QuizGenerateResponse(BaseModel):
     quiz_id: str
     status: str
@@ -74,6 +79,7 @@ class QuizResponse(BaseModel):
     score: int | None = None
     total: int | None = None
     status: str
+    source_flashcard_ids: list[str | None] | None = None
     created_at: datetime | None = None
     completed_at: datetime | None = None
 
