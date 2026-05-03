@@ -90,10 +90,10 @@ async def generate_weak_areas_quiz(
     session: AsyncSession = Depends(get_session),
 ):
     from app.models.flashcard import Flashcard
-    from sqlalchemy import func as sql_func
+    from sqlalchemy import func as sql_func, select as sql_select
 
     reviewed_count = (await session.execute(
-        sql_func.count().select_from(Flashcard).where(Flashcard.state != "new")
+        sql_select(sql_func.count()).select_from(Flashcard).where(Flashcard.state != "new")
     )).scalar() or 0
 
     if reviewed_count == 0:
