@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import random
+import re
 from functools import partial
 
 from sqlalchemy import select, text
@@ -37,9 +38,9 @@ def _assess_question_count(content: str, title: str, quiz_type: str) -> int:
     return _questions_for_length(len(content))
 
 
-MCQ_SYSTEM = """You are an expert educator creating a multiple-choice quiz to test comprehension and synthesis.
+MCQ_SYSTEM = """You are a JSON-only API. You output valid JSON arrays and nothing else. No prose. No markdown. No numbered lists. No explanation. Just JSON.
 
-You will be given ONE article. Generate exactly {{n}} multiple-choice question(s) from it.
+Generate exactly {{n}} multiple-choice question(s) from the given article.
 
 RULES:
 - Test UNDERSTANDING and SYNTHESIS, not copy-paste facts
@@ -50,7 +51,7 @@ RULES:
 - Questions should range from moderate to challenging
 - Use Unicode symbols (e.g. γ, β, α, ∑, √, ×) instead of LaTeX in all text
 
-You MUST respond with ONLY a JSON array. No markdown, no backticks, no commentary before or after.
+Output format — respond with ONLY this JSON structure, no other text:
 [
   {{
     "question": "string",
@@ -63,11 +64,13 @@ You MUST respond with ONLY a JSON array. No markdown, no backticks, no commentar
     "correct_index": 0,
     "explanation": "string"
   }}
-]"""
+]
 
-SHORT_ANSWER_SYSTEM = """You are an expert educator creating short-answer questions to test deep understanding.
+IMPORTANT: Your entire response must start with [ and end with ]. Do not include any text before or after the JSON array."""
 
-You will be given ONE article. Generate exactly {{n}} short-answer question(s) from it.
+SHORT_ANSWER_SYSTEM = """You are a JSON-only API. You output valid JSON arrays and nothing else. No prose. No markdown. No numbered lists. No explanation. Just JSON.
+
+Generate exactly {{n}} short-answer question(s) from the given article.
 
 RULES:
 - Questions should require 1-3 sentence answers
@@ -76,18 +79,20 @@ RULES:
 - Questions should range from moderate to challenging
 - Use Unicode symbols (e.g. γ, β, α, ∑, √, ×) instead of LaTeX in all text
 
-You MUST respond with ONLY a JSON array. No markdown, no backticks, no commentary before or after.
+Output format — respond with ONLY this JSON structure, no other text:
 [
   {{
     "question": "string",
     "model_answer": "string",
     "key_points": ["string"]
   }}
-]"""
+]
 
-FLASHCARD_SYSTEM = """You are an expert educator creating flashcards for spaced repetition learning.
+IMPORTANT: Your entire response must start with [ and end with ]. Do not include any text before or after the JSON array."""
 
-You will be given ONE article. Generate exactly {{n}} flashcard(s) from it.
+FLASHCARD_SYSTEM = """You are a JSON-only API. You output valid JSON arrays and nothing else. No prose. No markdown. No numbered lists. No explanation. Just JSON.
+
+Generate exactly {{n}} flashcard(s) from the given article.
 
 RULES:
 - Front: A concept name, term, or focused question (concise, 1-2 lines max)
@@ -97,14 +102,16 @@ RULES:
 - Prioritize the most important and testable knowledge
 - Use Unicode symbols (e.g. γ, β, α, ∑, √, ×) instead of LaTeX in all text
 
-You MUST respond with ONLY a JSON array. No markdown, no backticks, no commentary before or after.
+Output format — respond with ONLY this JSON structure, no other text:
 [
   {{
     "front": "string",
     "back": "string",
     "hint": "string"
   }}
-]"""
+]
+
+IMPORTANT: Your entire response must start with [ and end with ]. Do not include any text before or after the JSON array."""
 
 DEDUP_SECTION = """
 PREVIOUSLY GENERATED QUESTIONS (do NOT repeat or create similar questions):
@@ -114,7 +121,9 @@ PREVIOUSLY GENERATED QUESTIONS (do NOT repeat or create similar questions):
 ARTICLE_PROMPT_TEMPLATE = """ARTICLE TITLE: {title}
 
 ARTICLE CONTENT:
-{content}"""
+{content}
+
+Remember: respond with ONLY a JSON array. Start with [ and end with ]. No other text."""
 
 ASSESS_PROMPT = """You are an expert educator. Read the following article and determine how many distinct, high-quality {quiz_type} questions can be generated from it.
 
@@ -312,11 +321,22 @@ async def run_generation(quiz_id: str, articles: list[ArticleInfo]) -> None:
                 idx += 1
                 rounds += 1
 
+            if len(questions) == 0:
+                logger.warning(
+                    "Quiz generation: produced 0/%d questions for attempt %s",
+                    attempt.num_questions, quiz_id,
+                )
+                attempt.status = "failed"
+                attempt.error = "Failed to generate any questions. The article may be too long for the model to follow formatting instructions."
+                await session.commit()
+                return
+
             if len(questions) < attempt.num_questions:
                 logger.warning(
                     "Quiz generation: only produced %d/%d questions after %d rounds",
                     len(questions), attempt.num_questions, rounds,
                 )
+                attempt.num_questions = len(questions)
 
             attempt.status = "ready"
             await session.commit()
@@ -382,6 +402,37 @@ async def delete_quiz(session: AsyncSession, quiz_id: str) -> bool:
     return True
 
 
+async def delete_quizzes_batch(session: AsyncSession, quiz_ids: list[str]) -> int:
+    from sqlalchemy import delete as sql_delete
+    stmt = sql_delete(QuizAttempt).where(QuizAttempt.id.in_(quiz_ids))
+    result = await session.execute(stmt)
+    await session.commit()
+    return result.rowcount
+
+
+async def delete_all_quizzes(session: AsyncSession) -> int:
+    from sqlalchemy import delete as sql_delete
+    from sqlalchemy import func as sql_func
+
+    count_stmt = select(sql_func.count()).select_from(QuizAttempt)
+    total = (await session.execute(count_stmt)).scalar() or 0
+
+    stmt = sql_delete(QuizAttempt)
+    await session.execute(stmt)
+    await session.commit()
+    return total
+
+
+def _fix_latex_json_escapes(text: str) -> str:
+    def fix_inside_strings(match: re.Match) -> str:
+        s = match.group(0)
+        inner = s[1:-1]
+        inner = re.sub(r'\\([bfnrt])(?=[a-zA-Z{])', r'\\\\\\1', inner)
+        inner = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', inner)
+        return '"' + inner + '"'
+    return re.sub(r'"(?:[^"\\]|\\.)*"', fix_inside_strings, text)
+
+
 def _parse_json(raw: str) -> list[dict]:
     text = raw.strip()
 
@@ -391,41 +442,36 @@ def _parse_json(raw: str) -> list[dict]:
         lines = [l for l in lines if not l.strip().startswith("```")]
         cleaned = "\n".join(lines).strip()
 
-    if cleaned.startswith("["):
-        try:
-            parsed = json.loads(cleaned)
-            if isinstance(parsed, list):
-                return parsed
-        except json.JSONDecodeError:
-            pass
+    def _try_parse(s: str) -> list[dict] | None:
+        for attempt_text in (_fix_latex_json_escapes(s), s):
+            try:
+                parsed = json.loads(attempt_text)
+                if isinstance(parsed, list):
+                    return parsed
+                if isinstance(parsed, dict):
+                    return [parsed]
+            except (json.JSONDecodeError, ValueError):
+                continue
+        return None
+
+    if cleaned.startswith("[") or cleaned.startswith("{"):
+        result = _try_parse(cleaned)
+        if result is not None:
+            return result
 
     start = cleaned.find("[")
     end = cleaned.rfind("]")
     if start >= 0 and end > start:
-        try:
-            parsed = json.loads(cleaned[start:end + 1])
-            if isinstance(parsed, list):
-                return parsed
-        except json.JSONDecodeError:
-            pass
-
-    if cleaned.startswith("{"):
-        try:
-            parsed = json.loads(cleaned)
-            if isinstance(parsed, dict):
-                return [parsed]
-        except json.JSONDecodeError:
-            pass
+        result = _try_parse(cleaned[start:end + 1])
+        if result is not None:
+            return result
 
     start = cleaned.find("{")
     end = cleaned.rfind("}")
     if start >= 0 and end > start:
-        try:
-            parsed = json.loads(cleaned[start:end + 1])
-            if isinstance(parsed, dict):
-                return [parsed]
-        except json.JSONDecodeError:
-            pass
+        result = _try_parse(cleaned[start:end + 1])
+        if result is not None:
+            return result
 
     logger.error("Quiz LLM returned unparseable output (first 500 chars): %s", text[:500])
     return []

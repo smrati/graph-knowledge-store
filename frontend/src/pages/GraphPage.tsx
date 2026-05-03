@@ -12,6 +12,8 @@ import Chip from "@mui/material/Chip";
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import CircularProgress from "@mui/material/CircularProgress";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import Checkbox from "@mui/material/Checkbox";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import AccountTreeOutlinedIcon from "@mui/icons-material/AccountTreeOutlined";
 import ClearOutlinedIcon from "@mui/icons-material/ClearOutlined";
@@ -60,6 +62,26 @@ export default function GraphPage() {
   const [fuse, setFuse] = useState<InstanceType<typeof Fuse<ArticleIndexItem>> | null>(null);
   const [indexLoading, setIndexLoading] = useState(true);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const [showTopics, setShowTopics] = useState(false);
+  const [showKeywords, setShowKeywords] = useState(false);
+  const [showEntities, setShowEntities] = useState(false);
+  const [showLabels, setShowLabels] = useState(true);
+
+  const hiddenTypes = useMemo(() => {
+    const hidden = new Set<string>();
+    if (!showTopics) hidden.add("Topic");
+    if (!showKeywords) hidden.add("Keyword");
+    if (!showEntities) hidden.add("Entity");
+    return hidden;
+  }, [showTopics, showKeywords, showEntities]);
+
+  const [filteredNodes, filteredEdges] = useMemo(() => {
+    const nodeIds = new Set(nodes.filter((n) => !hiddenTypes.has(n.label)).map((n) => n.id));
+    return [
+      nodes.filter((n) => nodeIds.has(n.id)),
+      edges.filter((e) => nodeIds.has(e.source) && nodeIds.has(e.target)),
+    ];
+  }, [nodes, edges, hiddenTypes]);
 
   useEffect(() => {
     api.getArticlesIndex().then((data) => {
@@ -130,13 +152,35 @@ export default function GraphPage() {
     <Box>
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
         <Typography variant="h5" sx={{ fontWeight: 600 }}>Knowledge Graph</Typography>
-        {stats && (
-          <Box sx={{ display: "flex", gap: 2 }}>
-            {Object.entries(stats).map(([key, val]) => (
-              <Chip key={key} label={`${val} ${key}`} size="small" variant="outlined" />
-            ))}
-          </Box>
-        )}
+        <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+          <FormControlLabel
+            control={<Checkbox size="small" checked={showTopics} onChange={(e) => setShowTopics(e.target.checked)} sx={{ color: NODE_COLORS_LIGHT.Topic }} />}
+            label={<Typography variant="caption">Topics</Typography>}
+            sx={{ mr: 0 }}
+          />
+          <FormControlLabel
+            control={<Checkbox size="small" checked={showKeywords} onChange={(e) => setShowKeywords(e.target.checked)} sx={{ color: NODE_COLORS_LIGHT.Keyword }} />}
+            label={<Typography variant="caption">Keywords</Typography>}
+            sx={{ mr: 0 }}
+          />
+          <FormControlLabel
+            control={<Checkbox size="small" checked={showEntities} onChange={(e) => setShowEntities(e.target.checked)} sx={{ color: NODE_COLORS_LIGHT.Entity }} />}
+            label={<Typography variant="caption">Entities</Typography>}
+            sx={{ mr: 0 }}
+          />
+          <FormControlLabel
+            control={<Checkbox size="small" checked={showLabels} onChange={(e) => setShowLabels(e.target.checked)} />}
+            label={<Typography variant="caption">Labels</Typography>}
+            sx={{ mr: 0 }}
+          />
+          {stats && (
+            <Box sx={{ display: "flex", gap: 1, ml: 1 }}>
+              {Object.entries(stats).map(([key, val]) => (
+                <Chip key={key} label={`${val} ${key}`} size="small" variant="outlined" />
+              ))}
+            </Box>
+          )}
+        </Box>
       </Box>
 
       <Box sx={{ position: "relative", mb: 3, maxWidth: 480 }}>
@@ -221,9 +265,10 @@ export default function GraphPage() {
 
       {!loading && nodes.length > 0 && (
         <InteractiveGraph
-          nodes={nodes}
-          edges={edges}
+          nodes={filteredNodes}
+          edges={filteredEdges}
           selectedId={selectedId}
+          showLabels={showLabels}
           onArticleSelect={(id, title) => {
             setSelectedId(id);
             setSelectedTitle(title);
@@ -239,11 +284,13 @@ function InteractiveGraph({
   nodes,
   edges,
   selectedId,
+  showLabels,
   onArticleSelect,
 }: {
   nodes: GraphNode[];
   edges: GraphEdge[];
   selectedId: string | null;
+  showLabels: boolean;
   onArticleSelect: (id: string, title: string) => void;
 }) {
   const { dark } = useThemeMode();
@@ -307,7 +354,7 @@ function InteractiveGraph({
         nodeCanvasObjectMode={() => "after"}
         nodeCanvasObject={(node, ctx, globalScale) => {
           const n = node as GraphDataNode;
-          if (globalScale < 0.4) return;
+          if (!showLabels) return;
           const label = n.title || n.name || n.id;
           const maxLen = globalScale > 1 ? 30 : 20;
           const display = label.length > maxLen ? label.slice(0, maxLen - 1) + "\u2026" : label;

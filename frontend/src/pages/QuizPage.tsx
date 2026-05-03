@@ -16,6 +16,7 @@ import Chip from "@mui/material/Chip";
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import IconButton from "@mui/material/IconButton";
+import Checkbox from "@mui/material/Checkbox";
 import CircularProgress from "@mui/material/CircularProgress";
 import LinearProgress from "@mui/material/LinearProgress";
 import InputAdornment from "@mui/material/InputAdornment";
@@ -27,11 +28,14 @@ import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
+import Tooltip from "@mui/material/Tooltip";
 import SearchOutlinedIcon from "@mui/icons-material/SearchOutlined";
 import QuizOutlinedIcon from "@mui/icons-material/QuizOutlined";
 import HistoryOutlinedIcon from "@mui/icons-material/HistoryOutlined";
 import AccessTimeOutlinedIcon from "@mui/icons-material/AccessTimeOutlined";
 import DeleteOutlinedIcon from "@mui/icons-material/DeleteOutlined";
+import DeleteSweepOutlinedIcon from "@mui/icons-material/DeleteSweepOutlined";
+import DoneAllOutlinedIcon from "@mui/icons-material/DoneAllOutlined";
 
 const POLL_INTERVAL_MS = 3000;
 const ACTIVE_QUIZ_KEY = "active-quiz-id";
@@ -205,6 +209,10 @@ export default function QuizPage() {
   const [historyLoading, setHistoryLoading] = useState(false);
   const [reviewQuiz, setReviewQuiz] = useState<QuizResponse | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<QuizHistoryItem | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteTarget, setBulkDeleteTarget] = useState<"selected" | "all" | null>(null);
+
+  const allSelected = history.length > 0 && selectedIds.size === history.length;
 
   useEffect(() => {
     api.getArticlesIndex().then((data) => {
@@ -353,11 +361,31 @@ export default function QuizPage() {
     try {
       await api.deleteQuiz(deleteTarget.quiz_id);
       setHistory((prev) => prev.filter((h) => h.quiz_id !== deleteTarget.quiz_id));
+      setSelectedIds((prev) => { const n = new Set(prev); n.delete(deleteTarget.quiz_id); return n; });
       enqueueSnackbar("Quiz deleted", { variant: "success", autoHideDuration: 2000 });
     } catch {
       enqueueSnackbar("Failed to delete quiz", { variant: "error" });
     }
     setDeleteTarget(null);
+  }
+
+  async function handleBulkDelete() {
+    try {
+      if (bulkDeleteTarget === "all") {
+        const res = await api.deleteAllQuizzes();
+        enqueueSnackbar(`Deleted ${res.deleted} quiz(zes)`, { variant: "success", autoHideDuration: 2000 });
+      } else {
+        const ids = Array.from(selectedIds);
+        if (!ids.length) return;
+        const res = await api.deleteQuizzesBatch(ids);
+        enqueueSnackbar(`Deleted ${res.deleted} quiz(zes)`, { variant: "success", autoHideDuration: 2000 });
+      }
+      setSelectedIds(new Set());
+      loadHistory();
+    } catch {
+      enqueueSnackbar("Failed to delete quizzes", { variant: "error" });
+    }
+    setBulkDeleteTarget(null);
   }
 
   const isGenerating = status === "generating" || status === "pending";
@@ -523,55 +551,123 @@ export default function QuizPage() {
               <Typography color="text.secondary">No quiz history yet. Generate your first quiz!</Typography>
             </Paper>
           )}
-          {history.map((item) => (
-            <Paper
-              key={item.quiz_id}
-              variant="outlined"
-              sx={{ p: 2, mb: 1.5, borderRadius: 2, cursor: "pointer", transition: "all 0.15s", "&:hover": { borderColor: "primary.main", boxShadow: 1 } }}
-              onClick={() => handleReview(item)}
-            >
-              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <Box>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                    <QuizTypeLabel type={item.quiz_type} />
-                    <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1.5 }}>
-                      {item.num_questions} questions — {item.article_count} articles
-                    </Typography>
-                  </Typography>
-                  <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", mt: 0.5 }}>
-                    {item.topics.slice(0, 3).map((t) => (
-                      <Chip key={t} label={t} size="small" variant="outlined" color="primary" />
-                    ))}
-                    {item.topics.length > 3 && (
-                      <Chip label={`+${item.topics.length - 3}`} size="small" variant="outlined" />
-                    )}
-                  </Box>
-                </Box>
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                  <Box sx={{ textAlign: "right" }}>
-                    {item.status === "completed" && item.score !== null ? (
-                      <Typography variant="h6" sx={{ fontWeight: 700, color: (item.score / item.num_questions) >= 0.8 ? "#4caf50" : (item.score / item.num_questions) >= 0.5 ? "warning.main" : "#ef5350" }}>
-                        {item.score}/{item.total}
-                      </Typography>
-                    ) : (
-                      <Chip label="Not taken" size="small" variant="outlined" color="warning" />
-                    )}
-                    <Typography variant="caption" color="text.disabled" sx={{ display: "flex", alignItems: "center", gap: 0.5, justifyContent: "flex-end", mt: 0.5 }}>
-                      <AccessTimeOutlinedIcon sx={{ fontSize: 12 }} />
-                      {formatDate(item.created_at)}
-                    </Typography>
-                  </Box>
-                  <IconButton
+          {!historyLoading && history.length > 0 && (
+            <>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5, flexWrap: "wrap" }}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<DoneAllOutlinedIcon />}
+                  onClick={() => {
+                    if (allSelected) setSelectedIds(new Set());
+                    else setSelectedIds(new Set(history.map((h) => h.quiz_id)));
+                  }}
+                >
+                  {allSelected ? "Deselect All" : "Select All"}
+                </Button>
+                {selectedIds.size > 0 && (
+                  <Button
                     size="small"
-                    onClick={(e) => { e.stopPropagation(); setDeleteTarget(item); }}
-                    sx={{ color: "text.disabled", "&:hover": { color: "error.main" } }}
+                    variant="outlined"
+                    color="error"
+                    startIcon={<DeleteOutlinedIcon />}
+                    onClick={() => setBulkDeleteTarget("selected")}
                   >
-                    <DeleteOutlinedIcon fontSize="small" />
-                  </IconButton>
-                </Box>
+                    Delete Selected ({selectedIds.size})
+                  </Button>
+                )}
+                <Box sx={{ flex: 1 }} />
+                <Tooltip title="Delete all quizzes">
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="error"
+                    startIcon={<DeleteSweepOutlinedIcon />}
+                    onClick={() => setBulkDeleteTarget("all")}
+                  >
+                    Delete All
+                  </Button>
+                </Tooltip>
               </Box>
-            </Paper>
-          ))}
+
+              {history.map((item) => {
+                const checked = selectedIds.has(item.quiz_id);
+                return (
+                  <Paper
+                    key={item.quiz_id}
+                    variant="outlined"
+                    sx={{
+                      p: 2, mb: 1.5, borderRadius: 2,
+                      borderColor: checked ? "primary.main" : undefined,
+                      bgcolor: checked ? "action.selected" : undefined,
+                      transition: "all 0.15s",
+                      "&:hover": { borderColor: "primary.main", boxShadow: 1 },
+                    }}
+                  >
+                    <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1 }}>
+                      <Checkbox
+                        checked={checked}
+                        onChange={() => {
+                          setSelectedIds((prev) => {
+                            const n = new Set(prev);
+                            if (n.has(item.quiz_id)) n.delete(item.quiz_id);
+                            else n.add(item.quiz_id);
+                            return n;
+                          });
+                        }}
+                        sx={{ mt: -0.5 }}
+                      />
+                      <Box
+                        sx={{ flex: 1, cursor: "pointer" }}
+                        onClick={() => handleReview(item)}
+                      >
+                        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <Box>
+                            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                              <QuizTypeLabel type={item.quiz_type} />
+                              <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1.5 }}>
+                                {item.num_questions} questions — {item.article_count} articles
+                              </Typography>
+                            </Typography>
+                            <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", mt: 0.5 }}>
+                              {item.topics.slice(0, 3).map((t) => (
+                                <Chip key={t} label={t} size="small" variant="outlined" color="primary" />
+                              ))}
+                              {item.topics.length > 3 && (
+                                <Chip label={`+${item.topics.length - 3}`} size="small" variant="outlined" />
+                              )}
+                            </Box>
+                          </Box>
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                            <Box sx={{ textAlign: "right" }}>
+                              {item.status === "completed" && item.score !== null ? (
+                                <Typography variant="h6" sx={{ fontWeight: 700, color: (item.score / item.num_questions) >= 0.8 ? "#4caf50" : (item.score / item.num_questions) >= 0.5 ? "warning.main" : "#ef5350" }}>
+                                  {item.score}/{item.total}
+                                </Typography>
+                              ) : (
+                                <Chip label="Not taken" size="small" variant="outlined" color="warning" />
+                              )}
+                              <Typography variant="caption" color="text.disabled" sx={{ display: "flex", alignItems: "center", gap: 0.5, justifyContent: "flex-end", mt: 0.5 }}>
+                                <AccessTimeOutlinedIcon sx={{ fontSize: 12 }} />
+                                {formatDate(item.created_at)}
+                              </Typography>
+                            </Box>
+                            <IconButton
+                              size="small"
+                              onClick={(e) => { e.stopPropagation(); setDeleteTarget(item); }}
+                              sx={{ color: "text.disabled", "&:hover": { color: "error.main" } }}
+                            >
+                              <DeleteOutlinedIcon fontSize="small" />
+                            </IconButton>
+                          </Box>
+                        </Box>
+                      </Box>
+                    </Box>
+                  </Paper>
+                );
+              })}
+            </>
+          )}
         </>
       )}
 
@@ -585,6 +681,23 @@ export default function QuizPage() {
         <DialogActions>
           <Button onClick={() => setDeleteTarget(null)}>Cancel</Button>
           <Button onClick={handleDeleteQuiz} color="error" variant="contained">Delete</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={!!bulkDeleteTarget} onClose={() => setBulkDeleteTarget(null)}>
+        <DialogTitle>
+          {bulkDeleteTarget === "all" ? "Delete All Quizzes?" : `Delete ${selectedIds.size} Selected Quiz(zes)?`}
+        </DialogTitle>
+        <DialogContent>
+          <Typography>
+            {bulkDeleteTarget === "all"
+              ? "This will permanently delete ALL quizzes. This cannot be undone."
+              : `This will permanently delete ${selectedIds.size} selected quiz(zes). This cannot be undone.`}
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setBulkDeleteTarget(null)}>Cancel</Button>
+          <Button onClick={handleBulkDelete} color="error" variant="contained">Delete</Button>
         </DialogActions>
       </Dialog>
     </Box>

@@ -307,6 +307,12 @@ export const api = {
   deleteQuiz: (quizId: string) =>
     request<void>(`/quiz/${quizId}`, { method: "DELETE" }),
 
+  deleteQuizzesBatch: (quizIds: string[]) =>
+    request<{ deleted: number }>("/quiz/delete/batch", { method: "POST", body: JSON.stringify({ quiz_ids: quizIds }) }),
+
+  deleteAllQuizzes: () =>
+    request<{ deleted: number }>("/quiz/delete/all", { method: "DELETE" }),
+
   getLLMStats: (fromDate?: string, toDate?: string) => {
     let path = "/llm-logs/stats";
     const params: string[] = [];

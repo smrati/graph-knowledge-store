@@ -1,6 +1,7 @@
 import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
@@ -154,6 +155,27 @@ async def quiz_result(quiz_id: str, session: AsyncSession = Depends(get_session)
         raise HTTPException(status_code=500, detail=attempt.error or "Quiz generation failed")
 
     return _attempt_to_response(attempt)
+
+
+class BatchDeleteRequest(BaseModel):
+    quiz_ids: list[str]
+
+
+@router.post("/delete/batch", status_code=200)
+async def delete_quizzes_batch(
+    req: BatchDeleteRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    if not req.quiz_ids:
+        raise HTTPException(status_code=400, detail="No quiz IDs provided")
+    deleted = await quiz_service.delete_quizzes_batch(session, req.quiz_ids)
+    return {"deleted": deleted}
+
+
+@router.delete("/delete/all", status_code=200)
+async def delete_all_quizzes(session: AsyncSession = Depends(get_session)):
+    deleted = await quiz_service.delete_all_quizzes(session)
+    return {"deleted": deleted}
 
 
 @router.delete("/{quiz_id}", status_code=204)

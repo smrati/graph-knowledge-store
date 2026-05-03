@@ -5,6 +5,7 @@ import {
   type ShortAnswerQuestion,
   type FlashcardItem,
 } from "../api/client";
+import LatexText from "./LatexText";
 import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
@@ -51,6 +52,22 @@ export default function QuizRunner({ quiz, onRestart, onComplete, readOnly }: Pr
     } else {
       setFinished(true);
     }
+  }
+
+  if (!quiz.questions || quiz.questions.length === 0) {
+    return (
+      <Paper sx={{ p: 4, textAlign: "center", borderRadius: 3 }}>
+        <Typography variant="h6" color="error" sx={{ fontWeight: 600, mb: 1 }}>
+          No Questions Available
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          This quiz failed to generate questions. Please delete it and try again.
+        </Typography>
+        <Button variant="outlined" onClick={onRestart}>
+          Go Back
+        </Button>
+      </Paper>
+    );
   }
 
   if (quiz.quiz_type === "mcq") {
@@ -241,7 +258,7 @@ function McqRunner({
         <Box>
           <ProgressBar current={current} total={questions.length} />
           <Paper sx={{ p: 3, borderRadius: 3, mb: 2 }}>
-            <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>{q.question}</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}><LatexText text={q.question} /></Typography>
             <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
               {q.options.map((opt, i) => {
                 let borderColor = "divider";
@@ -252,7 +269,7 @@ function McqRunner({
                   <Paper key={opt.label} variant="outlined" sx={{ p: 1.5, borderColor, backgroundColor: bgColor, borderRadius: 2 }}>
                     <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
                       <Chip label={opt.label} size="small" sx={{ fontWeight: 600, minWidth: 28 }} />
-                      <Typography variant="body2">{opt.text}</Typography>
+                      <Typography variant="body2"><LatexText text={opt.text} /></Typography>
                       {i === q.correct_index && <CheckCircleOutlineOutlinedIcon sx={{ ml: "auto", color: "#4caf50", fontSize: 20 }} />}
                       {i === activeSelected && !isCorrect && i !== q.correct_index && <CancelOutlinedIcon sx={{ ml: "auto", color: "#ef5350", fontSize: 20 }} />}
                     </Box>
@@ -268,7 +285,7 @@ function McqRunner({
                 {isCorrect ? "Correct!" : "Incorrect"}
               </Typography>
             </Box>
-            <Typography variant="body2" color="text.secondary">{q.explanation}</Typography>
+            <Typography variant="body2" color="text.secondary"><LatexText text={q.explanation} /></Typography>
           </Paper>
           <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
             <Button variant="contained" onClick={() => onNext(answer)}>
@@ -284,7 +301,7 @@ function McqRunner({
     <Box>
       <ProgressBar current={current} total={questions.length} />
       <Paper sx={{ p: 3, borderRadius: 3, mb: 2 }}>
-        <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>{q.question}</Typography>
+        <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}><LatexText text={q.question} /></Typography>
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
           {q.options.map((opt, i) => {
             let borderColor = "divider";
@@ -308,7 +325,7 @@ function McqRunner({
               >
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
                   <Chip label={opt.label} size="small" sx={{ fontWeight: 600, minWidth: 28 }} />
-                  <Typography variant="body2">{opt.text}</Typography>
+                  <Typography variant="body2"><LatexText text={opt.text} /></Typography>
                   {selected !== null && i === q.correct_index && <CheckCircleOutlineOutlinedIcon sx={{ ml: "auto", color: "#4caf50", fontSize: 20 }} />}
                   {selected !== null && i === selected && !isCorrect && i !== q.correct_index && <CancelOutlinedIcon sx={{ ml: "auto", color: "#ef5350", fontSize: 20 }} />}
                 </Box>
@@ -326,7 +343,7 @@ function McqRunner({
               {isCorrect ? "Correct!" : "Incorrect"}
             </Typography>
           </Box>
-          <Typography variant="body2" color="text.secondary">{q.explanation}</Typography>
+          <Typography variant="body2" color="text.secondary"><LatexText text={q.explanation} /></Typography>
         </Paper>
       )}
 
@@ -391,7 +408,7 @@ function ShortAnswerRunner({
         <Box>
           <ProgressBar current={current} total={questions.length} />
           <Paper sx={{ p: 3, borderRadius: 3, mb: 2 }}>
-            <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>{q.question}</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}><LatexText text={q.question} /></Typography>
             <Paper variant="outlined" sx={{ p: 2, mb: 2, borderRadius: 2 }}>
               <Typography variant="caption" color="text.secondary">Your answer:</Typography>
               <Typography variant="body2">{saved.answer}</Typography>
@@ -399,13 +416,13 @@ function ShortAnswerRunner({
           </Paper>
           <Paper sx={{ p: 3, mb: 2, borderRadius: 2, border: "1px solid", borderColor: "primary.light" }}>
             <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, color: "primary.main" }}>Model Answer</Typography>
-            <Typography variant="body2" sx={{ mb: 2 }}>{q.model_answer}</Typography>
+            <Typography variant="body2" sx={{ mb: 2 }}><LatexText text={q.model_answer} /></Typography>
             <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>Key Points:</Typography>
             <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
               {q.key_points.map((pt, i) => (
                 <Box key={i} sx={{ display: "flex", alignItems: "flex-start", gap: 0.5 }}>
                   <EmojiObjectsOutlinedIcon sx={{ fontSize: 16, mt: 0.25, color: "warning.main" }} />
-                  <Typography variant="body2" color="text.secondary">{pt}</Typography>
+                  <Typography variant="body2" color="text.secondary"><LatexText text={pt} /></Typography>
                 </Box>
               ))}
             </Box>
@@ -432,7 +449,7 @@ function ShortAnswerRunner({
     <Box>
       <ProgressBar current={current} total={questions.length} />
       <Paper sx={{ p: 3, borderRadius: 3, mb: 2 }}>
-        <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>{q.question}</Typography>
+        <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}><LatexText text={q.question} /></Typography>
         <TextField
           fullWidth
           multiline
@@ -457,7 +474,7 @@ function ShortAnswerRunner({
             <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, color: "primary.main" }}>
               Model Answer
             </Typography>
-            <Typography variant="body2" sx={{ mb: 2 }}>{q.model_answer}</Typography>
+            <Typography variant="body2" sx={{ mb: 2 }}><LatexText text={q.model_answer} /></Typography>
             <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.5 }}>
               Key Points:
             </Typography>
@@ -465,7 +482,7 @@ function ShortAnswerRunner({
               {q.key_points.map((pt, i) => (
                 <Box key={i} sx={{ display: "flex", alignItems: "flex-start", gap: 0.5 }}>
                   <EmojiObjectsOutlinedIcon sx={{ fontSize: 16, mt: 0.25, color: "warning.main" }} />
-                  <Typography variant="body2" color="text.secondary">{pt}</Typography>
+                  <Typography variant="body2" color="text.secondary"><LatexText text={pt} /></Typography>
                 </Box>
               ))}
             </Box>
@@ -567,9 +584,9 @@ function FlashcardRunner({
             }}
           >
             <Typography variant="caption" color="text.disabled" sx={{ mb: 1, textAlign: "center" }}>QUESTION</Typography>
-            <Typography variant="h6" sx={{ fontWeight: 600, textAlign: "center", mb: 2 }}>{card.front}</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 600, textAlign: "center", mb: 2 }}><LatexText text={card.front} /></Typography>
             <Typography variant="caption" color="text.disabled" sx={{ mb: 1, textAlign: "center" }}>ANSWER</Typography>
-            <Typography variant="body1" sx={{ textAlign: "center" }}>{card.back}</Typography>
+            <Typography variant="body1" sx={{ textAlign: "center" }}><LatexText text={card.back} /></Typography>
           </Paper>
           <Paper sx={{ p: 2, mb: 2, borderRadius: 2, bgcolor: isCorrect ? "rgba(76,175,80,0.06)" : "rgba(239,83,80,0.06)" }}>
             <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -612,11 +629,11 @@ function FlashcardRunner({
           {flipped ? "ANSWER" : "QUESTION — click to reveal"}
         </Typography>
         <Typography variant="h6" sx={{ fontWeight: 600, textAlign: "center", mb: flipped ? 2 : 0 }}>
-          {flipped ? card.back : card.front}
+          <LatexText text={flipped ? card.back : card.front} />
         </Typography>
         {!flipped && card.hint && (
           <Typography variant="body2" color="text.disabled" sx={{ mt: 2, textAlign: "center", fontStyle: "italic" }}>
-            Hint: {card.hint}
+            Hint: <LatexText text={card.hint} />
           </Typography>
         )}
       </Paper>
