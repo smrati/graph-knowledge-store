@@ -96,8 +96,52 @@ def _parse_json(raw: str) -> list[dict]:
         if result is not None:
             return result
 
+    result = _recover_truncated_json(cleaned)
+    if result:
+        logger.warning("Recovered %d flashcards from truncated LLM output", len(result))
+        return result
+
     logger.error("Flashcard LLM returned unparseable output (first 500 chars): %s", text[:500])
     return []
+
+
+def _recover_truncated_json(text: str) -> list[dict]:
+    start = text.find("[")
+    if start < 0:
+        return []
+
+    fragment = text[start:]
+
+    cards: list[dict] = []
+    for m in re.finditer(r'\{\s*"front"\s*:\s*"', fragment):
+        obj_start = m.start()
+        card = _extract_card_from(fragment[obj_start:])
+        if card:
+            cards.append(card)
+
+    return cards
+
+
+def _extract_card_from(text: str) -> dict | None:
+    front_match = re.search(r'"front"\s*:\s*"((?:[^"\\]|\\.)*)"', text)
+    if not front_match:
+        return None
+    front = front_match.group(1)
+
+    remaining = text[front_match.end():]
+    back_match = re.search(r'"back"\s*:\s*"((?:[^"\\]|\\.)*)"', remaining)
+    if not back_match:
+        return None
+    back = back_match.group(1)
+
+    remaining = remaining[back_match.end():]
+    hint_match = re.search(r'"hint"\s*:\s*"((?:[^"\\]|\\.)*)"', remaining)
+    hint = hint_match.group(1) if hint_match else ""
+
+    def _unescape(s: str) -> str:
+        return s.replace('\\"', '"').replace("\\n", "\n").replace("\\t", "\t").replace("\\\\", "\\")
+
+    return {"front": _unescape(front), "back": _unescape(back), "hint": _unescape(hint)}
 
 
 def _is_duplicate(front: str, existing_fronts: list[str]) -> bool:
