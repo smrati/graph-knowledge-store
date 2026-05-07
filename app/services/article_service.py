@@ -13,6 +13,7 @@ from app.models.article import Article
 from app.schemas.article import ArticleCreate, ArticleIndexResponse, ArticleListResponse, ArticleListItem, ArticleUpdate
 from app.services.embedding_service import generate_and_store_embeddings
 from app.services.extraction_service import extract_metadata
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
