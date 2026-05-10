@@ -72,3 +72,10 @@ class SearchResult(BaseModel):
 class SearchResponse(BaseModel):
     results: list[SearchResult]
     query: str
+
+
+class TagsUpdateRequest(BaseModel):
+    add_topics: list[str] = Field(default_factory=list)
+    remove_topics: list[str] = Field(default_factory=list)
+    add_keywords: list[str] = Field(default_factory=list)
+    remove_keywords: list[str] = Field(default_factory=list)

@@ -126,6 +126,47 @@ async def update_article(
     return article
 
 
+async def update_manual_tags(
+    session: AsyncSession,
+    article_id: uuid.UUID,
+    add_topics: list[str] | None = None,
+    remove_topics: list[str] | None = None,
+    add_keywords: list[str] | None = None,
+    remove_keywords: list[str] | None = None,
+) -> Article | None:
+    article = await get_article(session, article_id)
+    if not article:
+        return None
+
+    current_topics = set(article.manual_topics or [])
+    current_topics |= set(add_topics or [])
+    current_topics -= set(remove_topics or [])
+    article.manual_topics = sorted(current_topics)
+
+    current_keywords = set(article.manual_keywords or [])
+    current_keywords |= set(add_keywords or [])
+    current_keywords -= set(remove_keywords or [])
+    article.manual_keywords = sorted(current_keywords)
+
+    article.topics = sorted(set(article.topics or []) | set(add_topics or []))
+    article.topics = [t for t in article.topics if t not in set(remove_topics or [])]
+
+    article.keywords = sorted(set(article.keywords or []) | set(add_keywords or []))
+    article.keywords = [k for k in article.keywords if k not in set(remove_keywords or [])]
+
+    await session.commit()
+    await session.refresh(article)
+
+    from app.services.graph_service import sync_article_to_graph
+    loop = get_running_loop()
+    await loop.run_in_executor(
+        _executor,
+        partial(sync_article_to_graph, article_id, article.title, article.topics, article.keywords, article.entities or []),
+    )
+
+    return article
+
+
 async def delete_article(session: AsyncSession, article_id: uuid.UUID) -> bool:
     article = await get_article(session, article_id)
     if not article:
@@ -158,8 +199,8 @@ async def _enrich_article(article_id: uuid.UUID, title: str, content: str) -> No
             loop = get_running_loop()
             metadata = await loop.run_in_executor(_executor, extract_metadata, content)
 
-            article.topics = metadata["topics"]
-            article.keywords = metadata["keywords"]
+            article.topics = sorted(set(metadata["topics"]) | set(article.manual_topics or []))
+            article.keywords = sorted(set(metadata["keywords"]) | set(article.manual_keywords or []))
             article.entities = metadata["entities"]
             article.summary = metadata["summary"]
             article.enrichment_status = "completed"

@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useSnackbar } from "notistack";
 import { api, type Article, type QuizType } from "../api/client";
 import MarkdownPreview from "./MarkdownPreview";
 import RelatedArticles from "./RelatedArticles";
@@ -8,6 +9,7 @@ import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
+import IconButton from "@mui/material/IconButton";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import ListItemIcon from "@mui/material/ListItemIcon";
@@ -26,6 +28,8 @@ import SchoolOutlinedIcon from "@mui/icons-material/SchoolOutlined";
 import CheckBoxOutlinedIcon from "@mui/icons-material/CheckBoxOutlined";
 import EditNoteOutlinedIcon from "@mui/icons-material/EditNoteOutlined";
 import StyleOutlinedIcon from "@mui/icons-material/StyleOutlined";
+import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
+import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 
 const ACTIVE_QUIZ_KEY = "active-quiz-id";
 
@@ -43,6 +47,11 @@ export default function ArticleView() {
   const [quizAnchor, setQuizAnchor] = useState<null | HTMLElement>(null);
   const [quizLoading, setQuizLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [tagInput, setTagInput] = useState("");
+  const [tagType, setTagType] = useState<"topic" | "keyword">("topic");
+  const [showTagInput, setShowTagInput] = useState(false);
+  const tagInputRef = useRef<HTMLInputElement>(null);
+  const { enqueueSnackbar } = useSnackbar();
 
   useEffect(() => {
     api.getArticle(id).then(setArticle).catch(() => navigate("/"));
@@ -74,6 +83,30 @@ export default function ArticleView() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
+  }
+
+  async function handleAddTag() {
+    if (!article || !tagInput.trim()) return;
+    const tag = tagInput.trim();
+    try {
+      const key = tagType === "topic" ? "add_topics" : "add_keywords";
+      const updated = await api.updateArticleTags(article.id, { [key]: [tag] });
+      setArticle(updated);
+      setTagInput("");
+    } catch {
+      enqueueSnackbar("Failed to add tag", { variant: "error" });
+    }
+  }
+
+  async function handleRemoveTag(tag: string, type: "topic" | "keyword") {
+    if (!article) return;
+    try {
+      const key = type === "topic" ? "remove_topics" : "remove_keywords";
+      const updated = await api.updateArticleTags(article.id, { [key]: [tag] });
+      setArticle(updated);
+    } catch {
+      enqueueSnackbar("Failed to remove tag", { variant: "error" });
+    }
   }
 
   if (!article) {
@@ -142,8 +175,8 @@ export default function ArticleView() {
         </Box>
       </Box>
 
-      {(article.topics.length > 0 || article.keywords.length > 0) && (
-        <Box sx={{ display: "flex", gap: 0.5, mb: 3, flexWrap: "wrap" }}>
+      <Box sx={{ mb: 3 }}>
+        <Box sx={{ display: "flex", gap: 0.5, flexWrap: "wrap", alignItems: "center" }}>
           {article.topics.map((t: string) => (
             <Chip
               key={t}
@@ -153,6 +186,7 @@ export default function ArticleView() {
               variant="outlined"
               clickable
               onClick={() => navigate("/?topic=" + encodeURIComponent(t))}
+              onDelete={() => handleRemoveTag(t, "topic")}
             />
           ))}
           {article.keywords.map((k: string) => (
@@ -163,10 +197,64 @@ export default function ArticleView() {
               variant="outlined"
               clickable
               onClick={() => navigate("/?keyword=" + encodeURIComponent(k))}
+              onDelete={() => handleRemoveTag(k, "keyword")}
             />
           ))}
+          {showTagInput ? (
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+              <Box
+                component="select"
+                value={tagType}
+                onChange={(e) => setTagType(e.target.value as "topic" | "keyword")}
+                style={{
+                  fontSize: 12, padding: "2px 4px", borderRadius: 4,
+                  border: "1px solid", borderColor: "#ccc", background: "transparent",
+                  outline: "none", cursor: "pointer",
+                }}
+              >
+                <option value="topic">Topic</option>
+                <option value="keyword">Keyword</option>
+              </Box>
+              <Box
+                component="input"
+                ref={tagInputRef}
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e: React.KeyboardEvent) => {
+                  if (e.key === "Enter") handleAddTag();
+                  if (e.key === "Escape") setShowTagInput(false);
+                }}
+                placeholder="Type tag..."
+                autoFocus
+                style={{
+                  fontSize: 12, padding: "2px 6px", borderRadius: 4,
+                  border: "1px solid", borderColor: "#ccc", outline: "none", width: 120,
+                }}
+              />
+              <Chip
+                label="Add"
+                size="small"
+                color="primary"
+                onClick={handleAddTag}
+                disabled={!tagInput.trim()}
+                icon={<AddOutlinedIcon />}
+              />
+              <IconButton size="small" onClick={() => { setShowTagInput(false); setTagInput(""); }}>
+                <CloseOutlinedIcon sx={{ fontSize: 14 }} />
+              </IconButton>
+            </Box>
+          ) : (
+            <Chip
+              label="Add Tag"
+              size="small"
+              variant="outlined"
+              icon={<AddOutlinedIcon />}
+              onClick={() => { setShowTagInput(true); setTimeout(() => tagInputRef.current?.focus(), 50); }}
+              sx={{ borderStyle: "dashed" }}
+            />
+          )}
         </Box>
-      )}
+      </Box>
 
       <Paper elevation={0} sx={{ p: 3, bgcolor: "background.paper", borderRadius: 2 }}>
         <MarkdownPreview content={article.content} />

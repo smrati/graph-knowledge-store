@@ -8,6 +8,7 @@ from app.schemas.article import (
     ArticleListResponse,
     ArticleResponse,
     ArticleUpdate,
+    TagsUpdateRequest,
 )
 from app.services import article_service, embedding_service as emb_service
 
@@ -93,3 +94,26 @@ async def delete_article(
     deleted = await article_service.delete_article(session, uid)
     if not deleted:
         raise HTTPException(status_code=404, detail="Article not found")
+
+
+@router.patch("/{article_id}/tags", response_model=ArticleResponse)
+async def update_tags(
+    article_id: str,
+    data: TagsUpdateRequest,
+    session: AsyncSession = Depends(get_session),
+):
+    from uuid import UUID
+
+    try:
+        uid = UUID(article_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid article ID")
+
+    article = await article_service.update_manual_tags(
+        session, uid,
+        add_topics=data.add_topics, remove_topics=data.remove_topics,
+        add_keywords=data.add_keywords, remove_keywords=data.remove_keywords,
+    )
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+    return article

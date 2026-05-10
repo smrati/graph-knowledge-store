@@ -20,6 +20,8 @@ class Article(Base):
     topics: Mapped[list] = mapped_column(JSONB, default=list)
     keywords: Mapped[list] = mapped_column(JSONB, default=list)
     entities: Mapped[list] = mapped_column(JSONB, default=list)
+    manual_topics: Mapped[list] = mapped_column(JSONB, default=list)
+    manual_keywords: Mapped[list] = mapped_column(JSONB, default=list)
     enrichment_status: Mapped[str] = mapped_column(String(20), default="pending")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

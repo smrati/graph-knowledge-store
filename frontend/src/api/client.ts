@@ -309,6 +309,9 @@ export const api = {
   deleteArticle: (id: string) =>
     request<void>(`/articles/${id}`, { method: "DELETE" }),
 
+  updateArticleTags: (id: string, data: { add_topics?: string[]; remove_topics?: string[]; add_keywords?: string[]; remove_keywords?: string[] }) =>
+    request<Article>(`/articles/${id}/tags`, { method: "PATCH", body: JSON.stringify(data) }),
+
   search: (q: string, limit = 10, mode = "semantic") =>
     request<SearchResponse>(`/search?q=${encodeURIComponent(q)}&limit=${limit}&mode=${mode}`),
 
