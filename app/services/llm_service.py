@@ -1,3 +1,4 @@
+import re
 import time
 
 from openai import OpenAI
@@ -149,6 +150,32 @@ def generate_title(content: str) -> str:
 
 
 def normalize_markdown_equations(content: str) -> str:
+    _LATEX_ENVS = [
+        "equation", "equation*", "align", "align*", "aligned", "aligned*",
+        "gather", "gather*", "cases", "cases*", "matrix", "pmatrix",
+        "bmatrix", "vmatrix", "split", "multline", "multline*",
+    ]
+    env_pattern = "|".join(re.escape(e) for e in _LATEX_ENVS)
+
+    replacements = [
+        (rf"\\begin{{({env_pattern})}}(.*?)\\end{{\1}}", r"$$\2$$"),
+        (r"\\\[(.*?)\\\]", r"$$\1$$"),
+        (r"\\\((.*?)\\\)", r"$\1$"),
+    ]
+
+    result = content
+    for pattern, repl in replacements:
+        result = re.sub(pattern, repl, result, flags=re.DOTALL)
+
+    _fix_dollar_blocks(result)
+    return result
+
+
+def _fix_dollar_blocks(text: str) -> str:
+    return text
+
+
+def fix_equation_snippet(text: str) -> str:
     start = time.monotonic()
     try:
         client = get_client()
@@ -158,48 +185,50 @@ def normalize_markdown_equations(content: str) -> str:
                 {
                     "role": "system",
                     "content": (
-                        "You are a markdown/LaTeX formatting fixer. Your ONLY job is to fix math equation delimiters.\n"
+                        "You are a LaTeX equation fixer. Fix the equation delimiters in the given snippet.\n"
                         "Rules:\n"
-                        "1. Wrap standalone/display equations in $$...$$\n"
-                        "2. Wrap inline equations in $...$\n"
-                        "3. Convert [equation] or multi-line [ \\n equation \\n ] blocks to $$equation$$\n"
-                        "4. Convert \\[...\\] to $$...$$ and \\(...\\) to $...$\n"
-                        "5. Leave ALL other text completely unchanged — headings, lists, tables, prose, code blocks\n"
-                        "6. Do NOT add, remove, or rewrite any content\n"
-                        "7. Do NOT translate or paraphrase anything\n"
-                        "8. Return the FULL markdown text with only equation delimiters fixed\n"
-                        "9. Preserve all blank lines and paragraph spacing"
+                        "1. Use $$...$$ for display/block equations\n"
+                        "2. Use $...$ for inline equations\n"
+                        "3. Return ONLY the fixed snippet — no explanation, no markdown, no code fences\n"
+                        "4. Do NOT change the actual math content, only the delimiters\n"
+                        "5. Use Unicode symbols (e.g. γ, β, α, ∑, √, ×) only if the input uses them\n"
+                        "6. CRITICAL: Keep the COMPLETE equation inside ONE pair of $$ delimiters. Variable names "
+                        "like W_Q^{(1)} = or y = or f(x) = are PART of the equation and must be INSIDE $$...$$\n"
+                        "7. Do NOT split a single equation across multiple $$ blocks. Everything from the variable "
+                        "name through the matrix/expression belongs in ONE $$ block\n"
+                        "8. Example: W_Q^{(1)} = \\begin{pmatrix}...\\end{pmatrix} should become "
+                        "$$W_Q^{(1)} = \\begin{pmatrix}...\\end{pmatrix}$$ (all in one block)"
                     ),
                 },
-                {"role": "user", "content": content},
+                {"role": "user", "content": text},
             ],
             temperature=0.0,
-            extra_body={"num_ctx": settings.llm_num_ctx},
+            extra_body={"num_ctx": min(4096, settings.llm_num_ctx)},
         )
-        normalized = response.choices[0].message.content
-        if not normalized or len(normalized) < len(content) * 0.5:
-            normalized = content
+        fixed = (response.choices[0].message.content or "").strip()
+        if not fixed:
+            fixed = text
         log_llm_call(
-            operation="normalize_equations",
+            operation="fix_equation_snippet",
             model=settings.llm_chat_model,
             latency_ms=int((time.monotonic() - start) * 1000),
             success=True,
-            input_text=content,
-            output_text=normalized or "",
-            num_ctx=settings.llm_num_ctx,
+            input_text=text,
+            output_text=fixed,
+            num_ctx=min(4096, settings.llm_num_ctx),
             temperature=0.0,
             api_usage=extract_usage(response),
         )
-        return normalized
+        return fixed
     except Exception as e:
         log_llm_call(
-            operation="normalize_equations",
+            operation="fix_equation_snippet",
             model=settings.llm_chat_model,
             latency_ms=int((time.monotonic() - start) * 1000),
             success=False,
-            input_text=content,
+            input_text=text,
             error_message=str(e),
-            num_ctx=settings.llm_num_ctx,
+            num_ctx=min(4096, settings.llm_num_ctx),
             temperature=0.0,
         )
         raise

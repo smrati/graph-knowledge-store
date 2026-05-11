@@ -312,6 +312,9 @@ export const api = {
   updateArticleTags: (id: string, data: { add_topics?: string[]; remove_topics?: string[]; add_keywords?: string[]; remove_keywords?: string[] }) =>
     request<Article>(`/articles/${id}/tags`, { method: "PATCH", body: JSON.stringify(data) }),
 
+  fixEquation: (text: string) =>
+    request<{ fixed: string }>("/llm/fix-equation", { method: "POST", body: JSON.stringify({ text }) }),
+
   search: (q: string, limit = 10, mode = "semantic") =>
     request<SearchResponse>(`/search?q=${encodeURIComponent(q)}&limit=${limit}&mode=${mode}`),
 

@@ -11,15 +11,17 @@ import Checkbox from "@mui/material/Checkbox";
 import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
 import Alert from "@mui/material/Alert";
-import SaveIcon from "@mui/icons-material/Save";
-import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
+import Tooltip from "@mui/material/Tooltip";
 import FunctionsIcon from "@mui/icons-material/Functions";
+import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
+import SaveIcon from "@mui/icons-material/Save";
 import { useSnackbar } from "notistack";
 
 export default function ArticleEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { enqueueSnackbar } = useSnackbar();
+  const { dark } = useThemeMode();
   const isEditing = Boolean(id);
 
   const [title, setTitle] = useState("");
@@ -28,6 +30,7 @@ export default function ArticleEditor() {
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState("");
+  const [fixing, setFixing] = useState(false);
 
   if (isEditing && !loaded) {
     (async () => {
@@ -41,6 +44,10 @@ export default function ArticleEditor() {
         <CircularProgress />
       </Box>
     );
+  }
+
+  function getTextArea(): HTMLTextAreaElement | null {
+    return document.querySelector("textarea.w-md-editor-text-input") || document.querySelector(".w-md-editor textarea") || null;
   }
 
   async function handleSave() {
@@ -68,7 +75,32 @@ export default function ArticleEditor() {
     ? loading || !content.trim() || !title.trim()
     : loading || !content.trim();
 
-  const { dark } = useThemeMode();
+  async function handleFixEquation() {
+    const ta = getTextArea();
+    if (!ta) {
+      enqueueSnackbar("Could not find editor textarea", { variant: "error" });
+      return;
+    }
+    const s = ta.selectionStart;
+    const e = ta.selectionEnd;
+    if (s === e) {
+      enqueueSnackbar("Select an equation in the editor first", { variant: "info", autoHideDuration: 3000 });
+      return;
+    }
+    const selected = content.substring(s, e);
+    if (!selected.trim()) return;
+
+    setFixing(true);
+    try {
+      const res = await api.fixEquation(selected);
+      const newContent = content.substring(0, s) + res.fixed + content.substring(e);
+      setContent(newContent);
+      enqueueSnackbar("Equation fixed", { variant: "success", autoHideDuration: 2000 });
+    } catch {
+      enqueueSnackbar("Failed to fix equation", { variant: "error" });
+    }
+    setFixing(false);
+  }
 
   return (
     <Box sx={{ maxWidth: 900 }} data-color-mode={dark ? "dark" : "light"}>
@@ -105,25 +137,38 @@ export default function ArticleEditor() {
         </Alert>
       )}
 
-      <FormControlLabel
-        control={
-          <Checkbox
-            checked={fixEquations}
-            onChange={(e) => setFixEquations(e.target.checked)}
-            icon={<FunctionsIcon />}
-            checkedIcon={<FunctionsIcon />}
-          />
-        }
-        label={
-          <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
-            Fix equations with LLM
-            <Typography component="span" variant="caption" color="text.disabled">
-              (extra LLM call to normalize LaTeX)
-            </Typography>
-          </Box>
-        }
-        sx={{ mb: 2 }}
-      />
+      <Box sx={{ display: "flex", alignItems: "center", gap: 2, mb: 2, flexWrap: "wrap" }}>
+        <FormControlLabel
+          control={
+            <Checkbox
+              checked={fixEquations}
+              onChange={(e) => setFixEquations(e.target.checked)}
+              icon={<FunctionsIcon />}
+              checkedIcon={<FunctionsIcon />}
+            />
+          }
+          label={
+            <Box component="span" sx={{ display: "inline-flex", alignItems: "center", gap: 0.5 }}>
+              Auto-fix equations
+              <Typography component="span" variant="caption" color="text.disabled">
+                (regex on save)
+              </Typography>
+            </Box>
+          }
+        />
+        <Tooltip title="Select equation text in the editor, then click this to fix it with LLM">
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={fixing ? <CircularProgress size={14} /> : <FunctionsIcon />}
+            onClick={handleFixEquation}
+            disabled={fixing}
+            sx={{ borderRadius: 2 }}
+          >
+            {fixing ? "Fixing..." : "Fix Equation (select first)"}
+          </Button>
+        </Tooltip>
+      </Box>
 
       <MDEditor value={content} onChange={(v) => setContent(v || "")} height={700} />
     </Box>
