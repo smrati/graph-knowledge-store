@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useSnackbar } from "notistack";
+import Fuse from "fuse.js";
 import { api, type Article, type QuizType } from "../api/client";
 import MarkdownPreview from "./MarkdownPreview";
 import RelatedArticles from "./RelatedArticles";
@@ -50,12 +51,42 @@ export default function ArticleView() {
   const [tagInput, setTagInput] = useState("");
   const [tagType, setTagType] = useState<"topic" | "keyword">("topic");
   const [showTagInput, setShowTagInput] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [allTopics, setAllTopics] = useState<string[]>([]);
+  const [allKeywords, setAllKeywords] = useState<string[]>([]);
   const tagInputRef = useRef<HTMLInputElement>(null);
+  const tagContainerRef = useRef<HTMLDivElement>(null);
   const { enqueueSnackbar } = useSnackbar();
 
   useEffect(() => {
     api.getArticle(id).then(setArticle).catch(() => navigate("/"));
   }, [id, navigate]);
+
+  useEffect(() => {
+    api.getArticlesIndex().then((data) => {
+      const topicSet = new Set<string>();
+      const keywordSet = new Set<string>();
+      for (const a of data.articles) {
+        for (const t of a.topics) topicSet.add(t);
+        for (const k of a.keywords) keywordSet.add(k);
+      }
+      setAllTopics(Array.from(topicSet).sort());
+      setAllKeywords(Array.from(keywordSet).sort());
+    });
+  }, []);
+
+  const availableSuggestions = useMemo(() => {
+    const pool = tagType === "topic" ? allTopics : allKeywords;
+    const current = article ? (tagType === "topic" ? article.topics : article.keywords) : [];
+    const currentLower = new Set(current.map((s: string) => s.toLowerCase()));
+    return pool.filter((s) => !currentLower.has(s.toLowerCase()));
+  }, [tagType, allTopics, allKeywords, article]);
+
+  const suggestions = useMemo(() => {
+    if (!tagInput.trim()) return availableSuggestions.slice(0, 8);
+    const fuse = new Fuse(availableSuggestions, { threshold: 0.4, ignoreLocation: true });
+    return fuse.search(tagInput.trim(), { limit: 8 }).map((r) => r.item);
+  }, [tagInput, availableSuggestions]);
 
   async function handleDelete() {
     setConfirmOpen(false);
@@ -85,14 +116,15 @@ export default function ArticleView() {
     });
   }
 
-  async function handleAddTag() {
-    if (!article || !tagInput.trim()) return;
-    const tag = tagInput.trim();
+  async function handleAddTag(value?: string) {
+    const tag = (value || tagInput).trim();
+    if (!article || !tag) return;
     try {
       const key = tagType === "topic" ? "add_topics" : "add_keywords";
       const updated = await api.updateArticleTags(article.id, { [key]: [tag] });
       setArticle(updated);
       setTagInput("");
+      setShowSuggestions(false);
     } catch {
       enqueueSnackbar("Failed to add tag", { variant: "error" });
     }
@@ -201,11 +233,11 @@ export default function ArticleView() {
             />
           ))}
           {showTagInput ? (
-            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+            <Box ref={tagContainerRef} sx={{ display: "flex", alignItems: "center", gap: 0.5, position: "relative" }}>
               <Box
                 component="select"
                 value={tagType}
-                onChange={(e) => setTagType(e.target.value as "topic" | "keyword")}
+                onChange={(e) => { setTagType(e.target.value as "topic" | "keyword"); setTagInput(""); }}
                 style={{
                   fontSize: 12, padding: "2px 4px", borderRadius: 4,
                   border: "1px solid", borderColor: "#ccc", background: "transparent",
@@ -215,27 +247,56 @@ export default function ArticleView() {
                 <option value="topic">Topic</option>
                 <option value="keyword">Keyword</option>
               </Box>
-              <Box
-                component="input"
-                ref={tagInputRef}
-                value={tagInput}
-                onChange={(e) => setTagInput(e.target.value)}
-                onKeyDown={(e: React.KeyboardEvent) => {
-                  if (e.key === "Enter") handleAddTag();
-                  if (e.key === "Escape") setShowTagInput(false);
-                }}
-                placeholder="Type tag..."
-                autoFocus
-                style={{
-                  fontSize: 12, padding: "2px 6px", borderRadius: 4,
-                  border: "1px solid", borderColor: "#ccc", outline: "none", width: 120,
-                }}
-              />
+              <Box sx={{ position: "relative" }}>
+                <Box
+                  component="input"
+                  ref={tagInputRef}
+                  value={tagInput}
+                  onChange={(e) => { setTagInput(e.target.value); setShowSuggestions(true); }}
+                  onFocus={() => setShowSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                  onKeyDown={(e: React.KeyboardEvent) => {
+                    if (e.key === "Enter") handleAddTag();
+                    if (e.key === "Escape") { setShowTagInput(false); setTagInput(""); }
+                  }}
+                  placeholder="Type or select..."
+                  autoFocus
+                  style={{
+                    fontSize: 12, padding: "2px 6px", borderRadius: 4,
+                    border: "1px solid", borderColor: "#ccc", outline: "none", width: 140,
+                  }}
+                />
+                {showSuggestions && suggestions.length > 0 && (
+                  <Paper
+                    elevation={4}
+                    sx={{
+                      position: "absolute", zIndex: 20, top: "100%", mt: 0.5,
+                      width: 200, overflow: "hidden", borderRadius: 1.5,
+                      maxHeight: 200, overflowY: "auto",
+                    }}
+                  >
+                    {suggestions.map((s) => (
+                      <Box
+                        key={s}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => { setTagInput(""); handleAddTag(s); }}
+                        sx={{
+                          px: 1.5, py: 0.75, cursor: "pointer", fontSize: 12,
+                          borderBottom: "1px solid", borderColor: "divider",
+                          "&:hover": { bgcolor: "action.hover" },
+                        }}
+                      >
+                        {s}
+                      </Box>
+                    ))}
+                  </Paper>
+                )}
+              </Box>
               <Chip
                 label="Add"
                 size="small"
                 color="primary"
-                onClick={handleAddTag}
+                onClick={() => handleAddTag()}
                 disabled={!tagInput.trim()}
                 icon={<AddOutlinedIcon />}
               />
