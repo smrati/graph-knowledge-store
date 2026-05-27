@@ -28,12 +28,13 @@ This guide covers backing up your knowledge base, restoring from a backup, and r
 make backup
 ```
 
-This runs `scripts/backup.sh`, which performs four steps:
+This runs `scripts/backup.sh`, which performs five steps:
 
 1. **Dumps the Postgres database** — full `pg_dump` with `--clean --if-exists` so the restore can overwrite an existing database without conflicts.
 2. **Copies the `.env` file** — captures your configuration (LLM endpoint, database credentials, model names) alongside the data.
-3. **Compresses everything** into a single tarball at `backups/backup_YYYYMMDD_HHMMSS.tar.gz`.
-4. **Prunes old backups** — retains the most recent 10 backups, deletes the rest.
+3. **Includes uploaded images** — copies all files from the `uploads/` directory (pasted/uploaded images embedded in articles).
+4. **Compresses everything** into a single tarball at `backups/backup_YYYYMMDD_HHMMSS.tar.gz`.
+5. **Prunes old backups** — retains the most recent 10 backups, deletes the rest.
 
 Example output:
 
@@ -41,12 +42,14 @@ Example output:
 === Knowledge Store Backup ===
 Timestamp: 20260426_143000
 Postgres container: graph-knowledge-store-postgres-1
-[1/4] Dumping Postgres database...
+[1/5] Dumping Postgres database...
   -> Dumped 245760 bytes
-[2/4] Copying environment config...
-[3/4] Compressing backup...
+[2/5] Copying environment config...
+[3/5] Including uploaded images...
+  -> 3 file(s) from uploads/
+[4/5] Compressing backup...
   -> Saved to backups/backup_20260426_143000.tar.gz (28K)
-[4/4] Cleaning up old backups...
+[5/5] Cleaning up old backups...
   -> 3 backups retained (max 10)
 
 === Backup complete ===
@@ -59,7 +62,8 @@ File: backups/backup_20260426_143000.tar.gz
 |---|---|
 | All Postgres data (articles, quiz attempts, embeddings) | Neo4j graph data |
 | `.env` configuration | `backups/` directory itself |
-| Alembic migration history | Docker volumes |
+| Uploaded images (`uploads/` directory) | Docker volumes |
+| Alembic migration history | |
 
 ### Scheduling automatic backups
 
@@ -109,14 +113,15 @@ bash scripts/restore.sh backups/backup_20260426_143000.tar.gz
 
 ### What happens during restore
 
-The restore script (`scripts/restore.sh`) performs six steps:
+The restore script (`scripts/restore.sh`) performs seven steps:
 
 1. **Extracts the tarball** — validates that `postgres_backup.sql` exists inside.
 2. **Restores `.env`** — if the backup included an `.env` file, it replaces the current one. Otherwise, keeps the existing config.
-3. **Resets Postgres** — stops all containers, deletes the Postgres data volume, starts a fresh Postgres container, and waits for it to be ready (up to 30 seconds).
-4. **Loads the SQL dump** — creates the pgvector extension, filters out `DROP EXTENSION` statements (to avoid connection crashes), and pipes the SQL into `psql` to recreate all tables and data.
-5. **Runs Alembic migrations** — applies any new migrations that may have been added since the backup was taken, bringing the schema to the latest version.
-6. **Starts all services** — brings Neo4j and any other containers back online.
+3. **Restores uploaded images** — if the backup contains an `uploads/` directory, it restores all image files so article image references work correctly.
+4. **Resets Postgres** — stops all containers, deletes the Postgres data volume, starts a fresh Postgres container, and waits for it to be ready (up to 30 seconds).
+5. **Loads the SQL dump** — creates the pgvector extension, filters out `DROP EXTENSION` statements (to avoid connection crashes), and pipes the SQL into `psql` to recreate all tables and data.
+6. **Runs Alembic migrations** — applies any new migrations that may have been added since the backup was taken, bringing the schema to the latest version.
+7. **Starts all services** — brings Neo4j and any other containers back online.
 
 You will see a confirmation prompt before any destructive action:
 
@@ -223,6 +228,7 @@ That's it. Postgres holds all articles and quiz data. Neo4j and embeddings are d
 | Data | Backed up? | Rebuildable? |
 |---|---|---|
 | Articles (content, metadata) | Yes (Postgres) | N/A — restored directly |
+| Uploaded images | Yes (uploads/ dir) | No — must be restored from backup |
 | Quiz attempts | Yes (Postgres) | N/A — restored directly |
 | Vector embeddings | Yes (Postgres) | Yes — `make rebuild-embeddings` |
 | Neo4j graph (topics, keywords, entities, relationships) | No | Yes — `make rebuild-graph-only` |

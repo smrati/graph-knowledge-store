@@ -34,15 +34,25 @@ echo "[1/4] Dumping Postgres database..."
 docker exec "$PG_CONTAINER" pg_dump -U "$PG_USER" "$PG_DB" --clean --if-exists > "$WORK_DIR/postgres_backup.sql"
 echo "  -> Dumped $(wc -c < "$WORK_DIR/postgres_backup.sql") bytes"
 
-echo "[2/4] Copying environment config..."
+echo "[2/5] Copying environment config..."
 cp "$PROJECT_DIR/.env" "$WORK_DIR/env_backup" 2>/dev/null || echo "  -> No .env file found, skipping"
 
-echo "[3/4] Compressing backup..."
+UPLOADS_DIR="$PROJECT_DIR/uploads"
+if [ -d "$UPLOADS_DIR" ] && [ "$(ls -A "$UPLOADS_DIR" 2>/dev/null)" ]; then
+    echo "[3/5] Including uploaded images..."
+    cp -r "$UPLOADS_DIR" "$WORK_DIR/uploads"
+    UPLOADED_COUNT=$(ls -1 "$WORK_DIR/uploads" | wc -l)
+    echo "  -> $UPLOADED_COUNT file(s) from uploads/"
+else
+    echo "[3/5] No uploaded images found, skipping"
+fi
+
+echo "[4/5] Compressing backup..."
 mkdir -p "$BACKUP_DIR"
 tar -czf "$BACKUP_DIR/${BACKUP_NAME}.tar.gz" -C "$WORK_DIR" .
 echo "  -> Saved to backups/${BACKUP_NAME}.tar.gz ($(du -h "$BACKUP_DIR/${BACKUP_NAME}.tar.gz" | cut -f1))"
 
-echo "[4/4] Cleaning up old backups..."
+echo "[5/5] Cleaning up old backups..."
 ls -1t "$BACKUP_DIR"/backup_*.tar.gz 2>/dev/null | tail -n +$((KEEP_LAST + 1)) | xargs -r rm
 REMAINING=$(ls -1 "$BACKUP_DIR"/backup_*.tar.gz 2>/dev/null | wc -l)
 echo "  -> $REMAINING backups retained (max $KEEP_LAST)"
