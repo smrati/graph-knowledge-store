@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     neo4j_user: str = "neo4j"
     neo4j_password: str = "password123"
 
+    upload_dir: str = "uploads"
+    upload_max_size_mb: int = 10
+
     @property
     def postgres_url(self) -> str:
         return (

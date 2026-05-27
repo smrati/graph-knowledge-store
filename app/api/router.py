@@ -9,6 +9,7 @@ from app.api.llm_logs import router as llm_logs_router
 from app.api.rag import router as rag_router
 from app.api.flashcards import router as flashcards_router
 from app.api.llm import router as llm_router
+from app.api.upload import router as upload_router
 
 router = APIRouter()
 router.include_router(articles_router)
@@ -20,3 +21,4 @@ router.include_router(llm_logs_router)
 router.include_router(rag_router)
 router.include_router(flashcards_router)
 router.include_router(llm_router)
+router.include_router(upload_router)
