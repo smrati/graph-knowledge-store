@@ -96,6 +96,25 @@ async def delete_article(
         raise HTTPException(status_code=404, detail="Article not found")
 
 
+@router.post("/{article_id}/regenerate", response_model=ArticleResponse)
+async def regenerate_article(
+    article_id: str,
+    background_tasks: BackgroundTasks,
+    session: AsyncSession = Depends(get_session),
+):
+    from uuid import UUID
+
+    try:
+        uid = UUID(article_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid article ID")
+
+    article = await article_service.regenerate_article(session, uid, background_tasks)
+    if not article:
+        raise HTTPException(status_code=404, detail="Article not found")
+    return article
+
+
 @router.patch("/{article_id}/tags", response_model=ArticleResponse)
 async def update_tags(
     article_id: str,

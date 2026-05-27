@@ -33,6 +33,7 @@ import AddOutlinedIcon from "@mui/icons-material/AddOutlined";
 import CloseOutlinedIcon from "@mui/icons-material/CloseOutlined";
 import BookmarkOutlinedIcon from "@mui/icons-material/BookmarkOutlined";
 import BookmarkIcon from "@mui/icons-material/Bookmark";
+import AutorenewOutlinedIcon from "@mui/icons-material/AutorenewOutlined";
 
 const ACTIVE_QUIZ_KEY = "active-quiz-id";
 
@@ -57,6 +58,7 @@ export default function ArticleView() {
   const [allTopics, setAllTopics] = useState<string[]>([]);
   const [allKeywords, setAllKeywords] = useState<string[]>([]);
   const [bookmarked, setBookmarked] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
   const tagInputRef = useRef<HTMLInputElement>(null);
   const tagContainerRef = useRef<HTMLDivElement>(null);
   const { enqueueSnackbar } = useSnackbar();
@@ -64,6 +66,19 @@ export default function ArticleView() {
   useEffect(() => {
     api.getArticle(id).then(setArticle).catch(() => navigate("/"));
   }, [id, navigate]);
+
+  useEffect(() => {
+    if (!article || article.enrichment_status === "completed" || article.enrichment_status === "failed") return;
+    const interval = setInterval(() => {
+      api.getArticle(id).then((updated) => {
+        setArticle(updated);
+        if (updated.enrichment_status === "completed" || updated.enrichment_status === "failed") {
+          clearInterval(interval);
+        }
+      });
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [id, article?.enrichment_status]);
 
   useEffect(() => {
     api.getBookmarkIds().then((res) => {
@@ -138,6 +153,20 @@ export default function ArticleView() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
+  }
+
+  async function handleRegenerate() {
+    if (!article) return;
+    setRegenerating(true);
+    try {
+      const updated = await api.regenerateArticle(article.id);
+      setArticle(updated);
+      enqueueSnackbar("Title & metadata regenerated. Enrichment running in background...", { variant: "success" });
+    } catch {
+      enqueueSnackbar("Failed to regenerate", { variant: "error" });
+    } finally {
+      setRegenerating(false);
+    }
   }
 
   async function handleAddTag(value?: string) {
@@ -227,6 +256,15 @@ export default function ArticleView() {
             onClick={() => navigate(`/editor/${article.id}`)}
           >
             Edit
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={regenerating ? <CircularProgress size={16} /> : <AutorenewOutlinedIcon />}
+            onClick={handleRegenerate}
+            disabled={regenerating}
+            color="secondary"
+          >
+            {regenerating ? "Regenerating..." : "Regenerate"}
           </Button>
           <Button
             variant="outlined"

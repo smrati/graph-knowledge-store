@@ -61,7 +61,7 @@ fi
 
 WORK_DIR=$(mktemp -d)
 echo ""
-echo "[1/6] Extracting backup..."
+echo "[1/7] Extracting backup..."
 tar -xzf "$BACKUP_FILE" -C "$WORK_DIR"
 
 if [ ! -f "$WORK_DIR/postgres_backup.sql" ]; then
@@ -72,7 +72,7 @@ fi
 echo "  -> Extracted $(du -h "$WORK_DIR/postgres_backup.sql" | cut -f1)"
 
 if [ -f "$WORK_DIR/env_backup" ]; then
-    echo "[2/6] Restoring .env config..."
+    echo "[2/7] Restoring .env config..."
     cp "$WORK_DIR/env_backup" "$PROJECT_DIR/.env"
     source "$PROJECT_DIR/.env"
     PG_USER="${POSTGRES_USER:-postgres}"
@@ -80,10 +80,20 @@ if [ -f "$WORK_DIR/env_backup" ]; then
     PG_PASSWORD="${POSTGRES_PASSWORD:-postgres}"
     echo "  -> .env restored"
 else
-    echo "[2/6] No .env in backup, keeping current"
+    echo "[2/7] No .env in backup, keeping current"
 fi
 
-echo "[3/6] Restarting Postgres with fresh data..."
+if [ -d "$WORK_DIR/uploads" ]; then
+    echo "[3/7] Restoring uploaded images..."
+    rm -rf "$PROJECT_DIR/uploads"
+    cp -r "$WORK_DIR/uploads" "$PROJECT_DIR/uploads"
+    UPLOADED_COUNT=$(ls -1 "$PROJECT_DIR/uploads" | wc -l)
+    echo "  -> Restored $UPLOADED_COUNT image(s) to uploads/"
+else
+    echo "[3/7] No images in backup, skipping"
+fi
+
+echo "[4/7] Restarting Postgres with fresh data..."
 docker compose -f "$PROJECT_DIR/docker-compose.yml" down
 docker volume rm graph-knowledge-store_postgres_data 2>/dev/null || true
 docker compose -f "$PROJECT_DIR/docker-compose.yml" up -d postgres
@@ -108,16 +118,16 @@ if [ -z "$PG_CONTAINER" ]; then
     exit 1
 fi
 
-echo "[4/6] Restoring database..."
+echo "[5/7] Restoring database..."
 docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -c "CREATE EXTENSION IF NOT EXISTS vector;" >/dev/null
 grep -v 'DROP EXTENSION' "$WORK_DIR/postgres_backup.sql" | docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB"
 echo "  -> Database restored"
 
-echo "[5/6] Running Alembic migrations..."
+echo "[6/7] Running Alembic migrations..."
 docker compose -f "$PROJECT_DIR/docker-compose.yml" up -d neo4j
 cd "$PROJECT_DIR" && .venv/bin/alembic upgrade head 2>/dev/null || python -m alembic upgrade head 2>/dev/null || echo "  -> Alembic skipped (run manually if needed)"
 
-echo "[6/6] Starting all services..."
+echo "[7/7] Starting all services..."
 docker compose -f "$PROJECT_DIR/docker-compose.yml" up -d
 
 rm -rf "$WORK_DIR"
