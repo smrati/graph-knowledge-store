@@ -167,6 +167,27 @@ async def update_manual_tags(
     return article
 
 
+async def regenerate_article(
+    session: AsyncSession,
+    article_id: uuid.UUID,
+    background_tasks: BackgroundTasks,
+) -> Article | None:
+    article = await get_article(session, article_id)
+    if not article:
+        return None
+
+    loop = get_running_loop()
+    from app.services.llm_service import generate_title
+    new_title = await loop.run_in_executor(_executor, generate_title, article.content)
+    article.title = new_title
+    article.enrichment_status = "pending"
+    await session.commit()
+    await session.refresh(article)
+
+    background_tasks.add_task(_enrich_article, article.id, article.title, article.content)
+    return article
+
+
 async def delete_article(session: AsyncSession, article_id: uuid.UUID) -> bool:
     article = await get_article(session, article_id)
     if not article:

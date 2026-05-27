@@ -330,6 +330,9 @@ export const api = {
   updateArticleTags: (id: string, data: { add_topics?: string[]; remove_topics?: string[]; add_keywords?: string[]; remove_keywords?: string[] }) =>
     request<Article>(`/articles/${id}/tags`, { method: "PATCH", body: JSON.stringify(data) }),
 
+  regenerateArticle: (id: string) =>
+    request<Article>(`/articles/${id}/regenerate`, { method: "POST" }),
+
   fixEquation: (text: string) =>
     request<{ fixed: string }>("/llm/fix-equation", { method: "POST", body: JSON.stringify({ text }) }),
 
