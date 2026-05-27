@@ -204,77 +204,75 @@ export default function ArticleView() {
 
   return (
     <Box sx={{ maxWidth: 900 }}>
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", mb: 2 }}>
-        <Typography variant="h4" sx={{ fontWeight: 700, flex: 1, pr: 2 }}>{article.title}</Typography>
-        <Box sx={{ display: "flex", gap: 1, flexShrink: 0 }}>
-          <Button
-            variant="outlined"
-            startIcon={bookmarked ? <BookmarkIcon /> : <BookmarkOutlinedIcon />}
-            onClick={handleToggleBookmark}
-            color={bookmarked ? "warning" : "primary"}
-          >
-            {bookmarked ? "Saved" : "Bookmark"}
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<SchoolOutlinedIcon />}
-            onClick={() => navigate(`/study?article=${article.id}`)}
-          >
-            Study
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={quizLoading ? <CircularProgress size={16} /> : <QuizOutlinedIcon />}
-            onClick={(e) => setQuizAnchor(e.currentTarget)}
-            disabled={quizLoading}
-          >
-            Quiz
-          </Button>
-          <Menu
-            anchorEl={quizAnchor}
-            open={Boolean(quizAnchor)}
-            onClose={() => setQuizAnchor(null)}
-          >
-            {QUIZ_TYPES.map((qt) => (
-              <MenuItem key={qt.value} onClick={() => handleQuizTypeSelect(qt.value)}>
-                <ListItemIcon>{qt.icon}</ListItemIcon>
-                <ListItemText>{qt.label}</ListItemText>
-              </MenuItem>
-            ))}
-          </Menu>
-          <Button
-            variant="outlined"
-            startIcon={copied ? <CheckOutlinedIcon /> : <ContentCopyOutlinedIcon />}
-            onClick={handleCopyMarkdown}
-            color={copied ? "success" : "primary"}
-          >
-            {copied ? "Copied" : "Copy"}
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={<EditOutlinedIcon />}
-            onClick={() => navigate(`/editor/${article.id}`)}
-          >
-            Edit
-          </Button>
-          <Button
-            variant="outlined"
-            startIcon={regenerating ? <CircularProgress size={16} /> : <AutorenewOutlinedIcon />}
-            onClick={handleRegenerate}
-            disabled={regenerating}
-            color="secondary"
-          >
-            {regenerating ? "Regenerating..." : "Regenerate"}
-          </Button>
-          <Button
-            variant="outlined"
-            color="error"
-            startIcon={<DeleteOutlineIcon />}
-            onClick={() => setConfirmOpen(true)}
-          >
-            Delete
-          </Button>
-        </Box>
+      <Typography variant="h4" sx={{ fontWeight: 700, mb: 1.5 }}>{article.title}</Typography>
+      <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", mb: 2 }}>
+        <Button
+          variant="outlined"
+          startIcon={bookmarked ? <BookmarkIcon /> : <BookmarkOutlinedIcon />}
+          onClick={handleToggleBookmark}
+          color={bookmarked ? "warning" : "primary"}
+        >
+          {bookmarked ? "Saved" : "Bookmark"}
+        </Button>
+        <Button
+          variant="outlined"
+          startIcon={<SchoolOutlinedIcon />}
+          onClick={() => navigate(`/study?article=${article.id}`)}
+        >
+          Study
+        </Button>
+        <Button
+          variant="outlined"
+          startIcon={quizLoading ? <CircularProgress size={16} /> : <QuizOutlinedIcon />}
+          onClick={(e) => setQuizAnchor(e.currentTarget)}
+          disabled={quizLoading}
+        >
+          Quiz
+        </Button>
+        <Menu
+          anchorEl={quizAnchor}
+          open={Boolean(quizAnchor)}
+          onClose={() => setQuizAnchor(null)}
+        >
+          {QUIZ_TYPES.map((qt) => (
+            <MenuItem key={qt.value} onClick={() => handleQuizTypeSelect(qt.value)}>
+              <ListItemIcon>{qt.icon}</ListItemIcon>
+              <ListItemText>{qt.label}</ListItemText>
+            </MenuItem>
+          ))}
+        </Menu>
+        <Button
+          variant="outlined"
+          startIcon={copied ? <CheckOutlinedIcon /> : <ContentCopyOutlinedIcon />}
+          onClick={handleCopyMarkdown}
+          color={copied ? "success" : "primary"}
+        >
+          {copied ? "Copied" : "Copy"}
+        </Button>
+        <Button
+          variant="outlined"
+          startIcon={<EditOutlinedIcon />}
+          onClick={() => navigate(`/editor/${article.id}`)}
+        >
+          Edit
+        </Button>
+        <Button
+          variant="outlined"
+          startIcon={regenerating ? <CircularProgress size={16} /> : <AutorenewOutlinedIcon />}
+          onClick={handleRegenerate}
+          disabled={regenerating}
+          color="secondary"
+        >
+          {regenerating ? "Regenerating..." : "Regenerate"}
+        </Button>
+        <Button
+          variant="outlined"
+          color="error"
+          startIcon={<DeleteOutlineIcon />}
+          onClick={() => setConfirmOpen(true)}
+        >
+          Delete
+        </Button>
       </Box>
 
       <Box sx={{ mb: 3 }}>
