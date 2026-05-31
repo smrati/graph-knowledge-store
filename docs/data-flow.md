@@ -52,6 +52,25 @@ Background Task (_enrich_article)
 
 Only content changes trigger re-enrichment. Title-only changes just update Postgres.
 
+## Article Regenerate
+
+```
+POST /api/articles/{id}/regenerate
+        │
+        ▼
+1. Re-generate title via LLM (generate_title)
+        │
+        ▼
+2. Set enrichment_status = "pending"
+        │
+        ▼
+3. Background Task (_enrich_article)
+    → Same pipeline as create:
+      re-extract → re-embed → re-sync graph
+```
+
+Useful when you've edited an article and want fresh metadata. The frontend auto-polls every 3s while enrichment is pending/processing to show updated tags when complete.
+
 ## Article Delete
 
 ```
@@ -63,7 +82,58 @@ DELETE /api/articles/{id}
               CASCADE automatically deletes all article_embeddings rows
 ```
 
-Neo4j cleanup happens first, then Postgres. Orphaned Topic/Keyword/Entity nodes remain in Neo4j (they may be shared by other articles).
+Neo4j cleanup happens first, then Postgres. Orphaned Topic/Keyword/Entity nodes remain in Neo4j (they may be shared by other articles). Bookmarks and flashcards are cascade-deleted.
+
+## Image Upload
+
+```
+User pastes image in markdown editor
+        │
+        ▼  POST /api/upload (multipart/form-data)
+        │
+        ├─ Validate: type (JPEG/PNG/GIF/WebP/SVG), size (max 10MB)
+        │
+        ├─ Generate UUID filename, save to uploads/
+        │
+        └─ Return {url: "/uploads/abc123.png"}
+                │
+                ▼
+Insert markdown image syntax at cursor: ![...](/uploads/abc123.png)
+```
+
+Images are stored locally in `uploads/` with UUID filenames. The `uploads/` directory is included in backups.
+
+## Bookmarks
+
+```
+User clicks bookmark toggle on ArticleView or ArticleCard
+        │
+        ▼  POST /api/bookmarks/{article_id}
+        │
+        ├─ If not bookmarked: INSERT into bookmarks table
+        └─ If already bookmarked: DELETE from bookmarks table
+        │
+        ▼
+Return {bookmarked: true|false}
+```
+
+The homepage fetches all bookmark IDs on load (`GET /api/bookmarks/ids`) for efficient highlight state on article cards.
+
+## Manual Tags
+
+```
+User adds/removes topic or keyword chip on ArticleView
+        │
+        ▼  PATCH /api/articles/{id}/tags
+     {add_topics: [...], remove_topics: [...], add_keywords: [...], remove_keywords: [...]}
+        │
+        ▼
+Update manual_topics / manual_keywords arrays
+Merge into topics / keywords arrays
+Sync updated tags to Neo4j graph
+```
+
+Manual tags are preserved across re-enrichment. When enrichment re-runs, LLM-extracted tags are merged with manual tags.
 
 ## Semantic Search
 
@@ -191,12 +261,11 @@ User selects topics + keywords on Quiz page (multi-select with fuse.js type-ahea
         │
         ▼  Backend:
 1. Fetch matching articles (OR logic across all topics/keywords)
-2. Build prompt: summaries + metadata from ALL articles
-                   + full content from SAMPLED subset (max 6)
-3. Cap prompt at 8000 chars
-4. Send to LLM → parse JSON response
+2. Create QuizAttempt (status="generating")
+3. Async task: build prompt, send to LLM, parse JSON response
         │
         ▼  Frontend:
+Poll GET /api/quiz/status/{quiz_id} until status="completed"
 QuizRunner renders based on quiz_type:
   - MCQ: 4 options, green/red feedback, explanation, auto-advance
   - Short Answer: text input → model answer + key points → self-score
@@ -205,6 +274,58 @@ QuizRunner renders based on quiz_type:
         ▼
 Score card at end with "Try Again" button
 ```
+
+Quiz generation is now asynchronous — the API returns a `quiz_id` immediately, and the frontend polls for completion. Article-specific and weak-area quizzes are also available.
+
+## Flashcard Study (Spaced Repetition)
+
+```
+Article enriched → if flashcard_auto_generate=true:
+        │
+        ▼  Background: generate_flashcards_for_article()
+    LLM generates N flashcards (front/back/hint)
+    Deduplicates against existing cards
+        │
+        ▼
+User visits Study page
+        │
+        ├─ GET /api/study/stats → dashboard cards
+        ├─ GET /api/study/due → due cards for review
+        ├─ GET /api/study/new → new cards (daily limit)
+        ├─ GET /api/study/decks → per-article deck list
+        │
+        ▼  User reviews card:
+POST /api/study/review/{card_id} {rating: 1-4}
+        │
+        ▼  SM-2 Algorithm (spaced_rep.py):
+Rating 1 (Again) → relearning step, lapse++
+Rating 2 (Hard) → ease decrease, small interval bump
+Rating 3 (Good) → normal interval scheduling
+Rating 4 (Easy) → ease increase, bonus multiplier
+```
+
+The SM-2 scheduler uses configurable learning/relearning steps, graduating intervals, and ease factors from `.env`.
+
+## RAG Chat
+
+```
+User asks question on Chat page
+        │
+        ▼  POST /api/rag/ask/stream {query, session_id?}
+        │
+        ▼  Backend:
+1. Embed query → search similar articles (top 5)
+2. Build context from article content (capped at 3000 chars each)
+3. Load chat history (if session_id provided, max 20 messages)
+4. Stream LLM response (SSE chunks)
+        │
+        ▼  Frontend:
+Render streaming chunks in real-time
+Show source articles with relevance scores
+Save messages to chat session
+```
+
+Chat sessions persist full conversation history. History is trimmed to the last 20 messages / 20,000 chars to stay within LLM context limits.
 
 ## LLM Call Logging
 
@@ -273,17 +394,21 @@ make backup
         ▼
 1. pg_dump from Postgres container → postgres_backup.sql
 2. Copy .env → env_backup
-3. Compress to backups/backup_YYYYMMDD_HHMMSS.tar.gz
-4. Auto-cleanup: keep last 10 backups
+3. Copy uploads/ → uploads/ (pasted/uploaded images)
+4. Compress to backups/backup_YYYYMMDD_HHMMSS.tar.gz
+5. Auto-cleanup: keep last 10 backups
 
 make restore
         │
         ▼
 1. List available backups (interactive menu)
 2. User confirms restore
-3. docker compose down + delete Postgres volume
-4. docker compose up -d (fresh Postgres)
-5. Create pgvector extension, filter DROP EXTENSION, restore SQL dump
-6. Run alembic upgrade head
-7. Print: "Run make rebuild-graph to rebuild Neo4j"
+3. Extract tarball
+4. Restore .env if present
+5. Restore uploads/ directory (image files)
+6. docker compose down + delete Postgres volume
+7. docker compose up -d (fresh Postgres)
+8. Create pgvector extension, filter DROP EXTENSION, restore SQL dump
+9. Run alembic upgrade head
+10. Start all services
 ```

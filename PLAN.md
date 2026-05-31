@@ -70,26 +70,50 @@ graph-knowledge-store/
 │   ├── models/
 │   │   ├── __init__.py
 │   │   ├── article.py
+│   │   ├── bookmark.py
+│   │   ├── chat.py
 │   │   ├── embedding.py
-│   │   └── llm_call_log.py
+│   │   ├── flashcard.py
+│   │   ├── llm_call_log.py
+│   │   └── quiz_attempt.py
 │   ├── schemas/
 │   │   ├── __init__.py
 │   │   ├── article.py
-│   │   ├── quiz.py
-│   │   └── llm_logs.py
+│   │   ├── bookmark.py
+│   │   ├── graph.py
+│   │   ├── llm_log.py
+│   │   └── quiz.py
 │   ├── services/
 │   │   ├── __init__.py
 │   │   ├── article_service.py
+│   │   ├── bookmark_service.py
 │   │   ├── embedding_service.py
-│   │   ├── llm_service.py
-│   │   ├── llm_observability.py
 │   │   ├── extraction_service.py
+│   │   ├── flashcard_service.py
 │   │   ├── graph_service.py
+│   │   ├── llm_observability.py
+│   │   ├── llm_service.py
+│   │   ├── quiz_service.py
+│   │   ├── rag_service.py
 │   │   ├── search_service.py
-│   │   └── quiz_service.py
+│   │   └── spaced_rep.py
+│   ├── api/
+│   │   ├── __init__.py
+│   │   ├── articles.py
+│   │   ├── bookmarks.py
+│   │   ├── flashcards.py
+│   │   ├── graph.py
+│   │   ├── llm.py
+│   │   ├── llm_logs.py
+│   │   ├── quiz.py
+│   │   ├── rag.py
+│   │   ├── router.py
+│   │   ├── search.py
+│   │   └── upload.py
 │   └── graph/
 │       ├── __init__.py
 │       └── neo4j_client.py
+├── uploads/                        # User-uploaded images (gitignored)
 ├── scripts/
 │   ├── backup.sh
 │   ├── restore.sh
@@ -117,16 +141,21 @@ graph-knowledge-store/
 │       │   ├── QuizRunner.tsx
 │       │   └── ScrollButtons.tsx
 │       ├── pages/
-│           ├── HomePage.tsx
-│           ├── EditorPage.tsx
-│           ├── ArticlePage.tsx
-│           ├── SearchPage.tsx
-│           ├── GraphPage.tsx
-│           ├── QuizPage.tsx
-│           └── LLMDashboardPage.tsx
+│       │   ├── HomePage.tsx
+│       │   ├── BookmarksPage.tsx
+│       │   ├── EditorPage.tsx
+│       │   ├── ArticlePage.tsx
+│       │   ├── SearchPage.tsx
+│       │   ├── GraphPage.tsx
+│       │   ├── QuizPage.tsx
+│       │   ├── StudyPage.tsx
+│       │   ├── ChatPage.tsx
+│       │   └── LLMDashboardPage.tsx
+│       └── ...
 └── docs/
     ├── architecture.md
     ├── api-reference.md
+    ├── backup-and-restore.md
     ├── configuration.md
     ├── data-flow.md
     ├── database-schema.md
@@ -148,6 +177,8 @@ CREATE TABLE articles (
     topics      JSONB DEFAULT '[]',
     keywords    JSONB DEFAULT '[]',
     entities    JSONB DEFAULT '[]',
+    manual_topics   JSONB DEFAULT '[]',
+    manual_keywords JSONB DEFAULT '[]',
     enrichment_status VARCHAR(20) DEFAULT 'pending',
     created_at  TIMESTAMPTZ DEFAULT NOW(),
     updated_at  TIMESTAMPTZ DEFAULT NOW()
@@ -213,6 +244,8 @@ CREATE CONSTRAINT FOR (k:Keyword) REQUIRE k.name IS UNIQUE;
 | `GET` | `/api/articles/index` | Lightweight index (id, title, summary, topics, keywords) for client-side search |
 | `GET` | `/api/articles/{id}` | Get article with metadata |
 | `PUT` | `/api/articles/{id}` | Update article (re-enriches if content changed) |
+| `POST` | `/api/articles/{id}/regenerate` | Regenerate title + metadata via LLM |
+| `PATCH` | `/api/articles/{id}/tags` | Add/remove manual topics and keywords |
 | `DELETE` | `/api/articles/{id}` | Delete article + embeddings + graph nodes |
 
 ### Search
@@ -236,6 +269,48 @@ CREATE CONSTRAINT FOR (k:Keyword) REQUIRE k.name IS UNIQUE;
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/api/quiz/generate` | Generate quiz from articles matching selected topics/keywords |
+| `POST` | `/api/quiz/generate/article/{id}` | Generate quiz for single article |
+| `POST` | `/api/quiz/generate/weak` | Generate quiz targeting weak-area flashcards |
+| `GET` | `/api/quiz/status/{quiz_id}` | Poll quiz generation status |
+| `POST` | `/api/quiz/{quiz_id}/submit` | Submit quiz answers and score |
+
+### Bookmarks
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/bookmarks/{article_id}` | Toggle bookmark on/off |
+| `GET` | `/api/bookmarks` | List bookmarked articles (paginated) |
+| `GET` | `/api/bookmarks/ids` | Get all bookmarked article IDs |
+
+### Study / Flashcards
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/study/stats` | Spaced repetition statistics |
+| `GET` | `/api/study/due` | Get due flashcards |
+| `GET` | `/api/study/new` | Get new flashcards (daily limit) |
+| `POST` | `/api/study/review/{card_id}` | Submit flashcard review (1-4 rating) |
+| `GET` | `/api/study/decks` | List flashcard decks per article |
+| `POST` | `/api/study/generate/{article_id}` | Generate flashcards for article |
+| `POST` | `/api/study/generate-more/{article_id}` | Generate additional flashcards |
+| `POST` | `/api/study/generate-all-missing` | Generate for all articles without flashcards |
+
+### RAG Chat
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/rag/ask` | Ask question with RAG retrieval |
+| `POST` | `/api/rag/ask/stream` | Streaming RAG answer (SSE) |
+| `POST` | `/api/rag/sessions` | Create chat session |
+| `GET` | `/api/rag/sessions` | List chat sessions |
+| `GET` | `/api/rag/sessions/{id}/messages` | Get session messages |
+| `DELETE` | `/api/rag/sessions/{id}` | Delete chat session |
+
+### Upload
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/api/upload` | Upload image (JPEG/PNG/GIF/WebP/SVG) |
 
 ### LLM Logs
 
@@ -269,8 +344,11 @@ CREATE CONSTRAINT FOR (k:Keyword) REQUIRE k.name IS UNIQUE;
 ## Key Features Implemented
 
 - **Auto-generated titles** via LLM when title is omitted on create
+- **Regenerate metadata** — re-run title generation + full enrichment on existing articles
+- **Manual tags** — add/remove topics and keywords that persist across re-enrichment
 - **LLM-powered equation normalization** (opt-in via `fix_equations` flag)
-- **Background enrichment pipeline** — LLM extraction → embedding → graph sync
+- **Image paste upload** — paste images directly in the markdown editor, stored locally in uploads/
+- **Background enrichment pipeline** — LLM extraction → embedding → graph sync → flashcard generation
 - **Semantic search** with chunked embeddings and cosine similarity
 - **Hybrid search** combining vector similarity with graph relationship scores
 - **Interactive knowledge graph** — force-directed layout, draggable nodes, zoom/pan, click to explore
@@ -283,6 +361,9 @@ CREATE CONSTRAINT FOR (k:Keyword) REQUIRE k.name IS UNIQUE;
 - **Pagination** — user-controllable page size (10–100) on HomePage and SearchPage
 - **Copy code button** — one-click copy on fenced code blocks in rendered markdown
 - **Scroll to top/bottom** — floating FAB button adapts based on scroll position
-- **Quiz system** — MCQ, short answer, and flashcard quizzes generated by LLM from filtered articles
+- **Bookmarks** — save articles for quick access with dedicated bookmarks page
+- **Quiz system** — MCQ, short answer, and flashcard quizzes (async generation, article-specific, weak-area targeting)
+- **Spaced repetition** — SM-2 flashcard scheduling with per-article decks, study stats, daily limits
+- **RAG chat** — ask questions about your knowledge base with streaming answers and source citations
 - **LLM observability** — dashboard monitoring all LLM calls with latency, token usage, error tracking, and per-operation breakdown
-- **Backup & restore** — `make backup` / `make restore` with auto-cleanup, Neo4j rebuildable via `make rebuild-graph`
+- **Backup & restore** — `make backup` / `make restore` with auto-cleanup, includes uploaded images, Neo4j rebuildable via `make rebuild-graph`

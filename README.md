@@ -44,7 +44,7 @@ Graph Knowledge Store solves this by turning a flat collection of markdown artic
 - **Discover hidden connections** — the knowledge graph surfaces relationships between articles you wrote weeks or months apart, sparking new insights
 - **Zero manual tagging** — LLM-powered enrichment eliminates the burden of organizing content, keeping your knowledge base structured without effort
 - **Fully local and private** — runs entirely on your machine with Ollama. No data leaves your laptop. Or plug in any cloud LLM provider when you need more power
-- **Disaster-proof** — one-command backup and restore. Neo4j graph is fully rebuildable from Postgres + LLM, so backups stay small
+- **Disaster-proof** — one-command backup and restore. Neo4j graph is fully rebuildable from Postgres + LLM, so backups stay small. Uploaded images included in backups.
 
 ## Prerequisites
 
@@ -145,15 +145,19 @@ graph-knowledge-store/
 │       ├── api/                # HTTP client
 │       ├── components/         # UI components (MUI)
 │       ├── pages/              # Route pages
-│       │   └── LLMDashboardPage.tsx  # LLM monitoring dashboard
+│       │   ├── LLMDashboardPage.tsx  # LLM monitoring dashboard
+│       │   ├── BookmarksPage.tsx     # Saved articles page
+│       │   ├── StudyPage.tsx         # Spaced repetition flashcards
+│       │   └── ChatPage.tsx          # RAG chat interface
 │       └── theme.ts            # Material Design theme (light + dark)
+├── uploads/                    # User-uploaded images (gitignored)
 ├── docker/                       # Dockerfiles
 │   └── postgres.Dockerfile       # Postgres + pgvector (cross-platform)
 ├── scripts/                    # Backup, restore, rebuild utilities
-│   ├── backup.sh               # Postgres backup with compression
-│   ├── restore.sh              # Interactive database restore
+│   ├── backup.sh               # Postgres + images backup with compression
+│   ├── restore.sh              # Interactive database + images restore
 │   └── rebuild_graph.py        # Rebuild Neo4j from Postgres
-├── alembic/                    # Database migrations
+├── alembac/                    # Database migrations
 ├── docs/                       # Documentation
 ├── docker-compose.yml          # Postgres + Neo4j
 ├── Makefile                    # backup, restore, rebuild-graph targets
@@ -171,34 +175,55 @@ graph-knowledge-store/
 | `GET` | `/api/articles/{id}` | Get article |
 | `PUT` | `/api/articles/{id}` | Update article |
 | `DELETE` | `/api/articles/{id}` | Delete article |
+| `POST` | `/api/articles/{id}/regenerate` | Regenerate title, topics, keywords, summary via LLM |
+| `PATCH` | `/api/articles/{id}/tags` | Add/remove manual topics and keywords |
+| `POST` | `/api/upload` | Upload image (paste in editor) |
+| `POST` | `/api/bookmarks/{article_id}` | Toggle bookmark on/off |
+| `GET` | `/api/bookmarks` | List bookmarked articles |
+| `GET` | `/api/bookmarks/ids` | Get all bookmarked article IDs |
 | `GET` | `/api/search?q=...&mode=semantic\|hybrid` | Search articles |
 | `GET` | `/api/graph/full` | Full knowledge graph |
 | `GET` | `/api/graph/article/{id}/neighbors` | Related articles via graph |
 | `GET` | `/api/graph/article/{id}/subgraph` | Subgraph for visualization |
 | `GET` | `/api/graph/stats` | Graph statistics |
 | `POST` | `/api/quiz/generate` | Generate quiz from filtered articles |
+| `POST` | `/api/quiz/generate/article/{id}` | Generate quiz for single article |
+| `POST` | `/api/quiz/generate/weak` | Generate quiz from weak-area flashcards |
+| `GET` | `/api/study/stats` | Spaced repetition statistics |
+| `GET` | `/api/study/due` | Get due flashcards |
+| `POST` | `/api/study/review/{card_id}` | Submit flashcard review (1-4 rating) |
+| `GET` | `/api/study/decks` | List flashcard decks per article |
+| `POST` | `/api/study/generate/{article_id}` | Generate flashcards for article |
+| `POST` | `/api/rag/ask` | Ask AI with RAG (retrieval-augmented generation) |
+| `POST` | `/api/rag/ask/stream` | Streaming RAG answer |
+| `GET` | `/api/rag/sessions` | List chat sessions |
 | `GET` | `/api/llm-logs/stats` | LLM call aggregate stats |
 | `GET` | `/api/llm-logs` | Paginated LLM call log |
 | `GET` | `/api/health` | Health check |
 
 ## Features
 
-- **Markdown editor** with live preview, LaTeX math rendering (KaTeX), and table support
+- **Markdown editor** with live preview, LaTeX math rendering (KaTeX), table support, and image paste upload
 - **Auto-generated titles** via LLM when title is omitted
 - **LLM enrichment** — automatic topic, keyword, entity extraction, and summary generation
+- **Regenerate metadata** — re-run title generation and enrichment on existing articles
+- **Manual tags** — add/remove topics and keywords alongside LLM-extracted ones
 - **Semantic search** — vector similarity search with instant type-ahead via fuse.js
 - **Hybrid search** — combines vector similarity with graph-based relationship scores
 - **Knowledge graph** — interactive force-directed visualization with zoom, pan, and drag
 - **Clickable topics/keywords** — filter articles by clicking topic or keyword chips
 - **Related articles** — graph-based related article suggestions
+- **Bookmarks** — save articles for quick access, dedicated bookmarks page
 - **Material Design UI** — MUI component library with light/dark mode toggle
 - **Quiz system** — AI-generated quizzes (MCQ, short answer, flashcards) for active recall
+- **Spaced repetition** — flashcards with SM-2 style scheduling, per-article decks, study stats
+- **RAG chat** — ask questions about your knowledge base with streaming answers and source citations
 - **LLM observability** — dashboard monitoring all LLM calls with latency, token usage, error tracking, and per-operation breakdown
 - **Collapsible sidebar** — expand/collapse with state persisted in localStorage
 - **Pagination** — user-controllable page size (10–100) across all article lists
 - **Copy code** — one-click copy button on fenced code blocks in rendered markdown
 - **Scroll buttons** — floating button to scroll to top/bottom of any page
-- **Backup & restore** — shell scripts for Postgres backup with auto-cleanup
+- **Backup & restore** — shell scripts for Postgres backup with auto-cleanup, includes uploaded images
 
 ## Documentation
 
