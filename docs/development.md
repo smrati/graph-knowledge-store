@@ -161,7 +161,7 @@ make rebuild-graph-only  # Rebuild Neo4j only
 make rebuild-embeddings  # Rebuild embeddings only
 ```
 
-Backups contain Postgres dump + `.env` config. Neo4j is not backed up (fully rebuildable).
+Backups contain Postgres dump + `.env` config + uploaded images. Neo4j is not backed up (fully rebuildable).
 
 ## Running Tests
 

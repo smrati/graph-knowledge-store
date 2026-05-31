@@ -43,17 +43,21 @@ Data Layer (app/models/, app/graph/)
 - Wraps synchronous Neo4j and LLM calls in `ThreadPoolExecutor` to avoid blocking the async event loop
 
 **Service Layer** (`app/services/`)
-- `article_service.py` — CRUD operations, orchestrates enrichment pipeline, case-insensitive JSONB filtering
+- `article_service.py` — CRUD operations, orchestrates enrichment pipeline, case-insensitive JSONB filtering, regenerate metadata
 - `llm_service.py` — generic LLM client (chat + embed) via OpenAI SDK, includes `generate_title()` and `normalize_markdown_equations()`. Supports separate endpoints for chat and embedding models via `LLM_EMBEDDING_BASE_URL` / `LLM_EMBEDDING_API_KEY`.
 - `extraction_service.py` — structured metadata extraction from article content
 - `embedding_service.py` — text chunking, embedding generation, vector similarity search
 - `graph_service.py` — Neo4j CRUD, deduplicated neighbor queries, subgraph extraction, full graph retrieval
 - `search_service.py` — hybrid search combining vector + graph scores
-- `quiz_service.py` — quiz generation (MCQ, short answer, flashcards) with summaries + sampling for context efficiency
+- `quiz_service.py` — quiz generation (MCQ, short answer, flashcards) with async generation and summaries + sampling for context efficiency
+- `flashcard_service.py` — flashcard generation, per-article deck management, auto-generation on enrichment
+- `spaced_rep.py` — SM-2 spaced repetition scheduling (learning/relearning steps, ease factor, intervals)
+- `bookmark_service.py` — toggle, list, and ID-set lookup for article bookmarks
+- `rag_service.py` — retrieval-augmented generation with chat sessions, streaming responses, and source citations
 - `llm_observability.py` — sync DB logger for LLM calls; estimates tokens (~4 chars/token) when API doesn't provide usage; extracts usage with `getattr` fallbacks for Ollama compatibility
 
 **Data Layer**
-- `app/models/` — SQLAlchemy ORM models (Article, ArticleEmbedding, LLMCallLog)
+- `app/models/` — SQLAlchemy ORM models (Article, ArticleEmbedding, LLMCallLog, Bookmark, Flashcard, QuizAttempt, ChatSession, ChatMessage)
 - `app/graph/neo4j_client.py` — Neo4j driver lifecycle, constraint initialization
 - `app/database.py` — async SQLAlchemy engine and session factory
 - `app/config.py` — centralized configuration via pydantic-settings
@@ -100,20 +104,23 @@ The frontend is a single-page application built with:
 ```
 App.tsx (BrowserRouter)
 └── MaterialThemeProvider.tsx (MUI ThemeProvider + CssBaseline + SnackbarProvider + dark mode context)
-    └── Layout.tsx (MUI Drawer sidebar — collapsible, dark mode toggle, Quiz nav item)
-        ├── HomePage.tsx (reads ?topic / ?keyword URL params, "Take Quiz" button on filtered view)
-        │   ├── ArticleCard.tsx (MUI Card + clickable Chip topics + delete dialog)
+    └── Layout.tsx (MUI Drawer sidebar — collapsible, dark mode toggle)
+        ├── HomePage.tsx (reads ?topic / ?keyword URL params, bookmark highlights, "Take Quiz" button)
+        │   ├── ArticleCard.tsx (MUI Card + clickable Chips + bookmark icon + delete dialog)
         │   └── PaginationControls.tsx (page size selector + page navigation)
+        ├── BookmarksPage.tsx (paginated list of bookmarked articles)
         ├── EditorPage.tsx
-        │   └── ArticleEditor.tsx (MUI TextField, Checkbox, Alert, dark mode for md-editor)
+        │   └── ArticleEditor.tsx (MUI TextField, image paste upload, dark mode for md-editor)
         ├── ArticlePage.tsx
-        │   └── ArticleView.tsx (clickable topic/keyword Chips, delete dialog)
+        │   └── ArticleView.tsx (title + action buttons below, topic/keyword Chips, regenerate button)
         │       ├── MarkdownPreview.tsx (copy code button, dark mode prose-invert)
         │       └── RelatedArticles.tsx (MUI List + ListItemButton, deduplicated)
         ├── SearchPage.tsx (fuse.js type-ahead + semantic/hybrid search + pagination)
         ├── GraphPage.tsx (full network + zoom-to-subgraph, dark mode aware colors)
         ├── QuizPage.tsx (multi-select topics/keywords, quiz type picker, question count slider)
         │   └── QuizRunner.tsx (MCQ / Short Answer / Flashcard modes, score card)
+        ├── StudyPage.tsx (spaced repetition flashcard review, deck browser, study stats)
+        ├── ChatPage.tsx (RAG chat with streaming answers, source citations, session management)
         ├── LLMDashboardPage.tsx (summary cards, per-operation table, errors table, paginated call log)
         └── ScrollButtons.tsx (floating FAB — scroll to top/bottom)
 ```
@@ -169,6 +176,9 @@ article_service
     │       └── llm_service (embeddings)
     ├── graph_service (Neo4j operations)
     │       └── neo4j_client (driver management)
+    ├── flashcard_service (flashcard generation)
+    │       └── llm_service (chat completions)
+    ├── bookmark_service (bookmark toggle + list)
     └── search_service (hybrid ranking)
         ├── embedding_service (vector search)
         └── graph_service (neighbor scores)
@@ -176,6 +186,14 @@ article_service
 quiz_service
     ├── article_service (fetch filtered articles)
     └── llm_service (quiz question generation)
+
+rag_service
+    ├── embedding_service (semantic retrieval)
+    ├── llm_service (answer generation + streaming)
+    └── chat models (session/message persistence)
+
+spaced_rep
+    └── config (learning steps, intervals, ease settings)
 
 llm_service
     └── llm_observability (logs every LLM call — sync DB INSERT with token estimation)

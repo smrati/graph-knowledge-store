@@ -45,6 +45,28 @@ These control which LLM provider and models the application uses.
 | `NEO4J_USER` | `neo4j` | Neo4j username |
 | `NEO4J_PASSWORD` | `password123` | Neo4j password |
 
+### Upload Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `UPLOAD_DIR` | `uploads` | Directory for uploaded images (created automatically) |
+| `UPLOAD_MAX_SIZE_MB` | `10` | Maximum image upload size in megabytes |
+
+### Flashcard / Spaced Repetition Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `FLASHCARD_AUTO_GENERATE` | `true` | Auto-generate flashcards on article enrichment |
+| `FLASHCARD_AUTO_COUNT` | `8` | Number of flashcards to auto-generate per article |
+| `FLASHCARD_DAILY_NEW_LIMIT` | `10` | Max new cards introduced per day |
+| `FLASHCARD_LEARNING_STEPS` | `1,10` | Learning intervals in minutes |
+| `FLASHCARD_RELEARNING_STEPS` | `10` | Relearning intervals in minutes after lapse |
+| `FLASHCARD_GRADUATING_INTERVAL` | `1` | Days until first review after graduating from learning |
+| `FLASHCARD_EASY_INTERVAL` | `4` | Days for "Easy" rating on new card |
+| `FLASHCARD_EASY_BONUS` | `1.3` | Multiplier for "Easy" reviews |
+| `FLASHCARD_MAXIMUM_INTERVAL` | `365` | Maximum review interval in days |
+| `FLASHCARD_MINIMUM_EASE` | `1.3` | Minimum ease factor (prevents collapse) |
+
 ## Switching LLM Providers
 
 ### Ollama (default)

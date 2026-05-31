@@ -12,9 +12,11 @@ The Pgvector extension is enabled via Alembic migration. All migrations live in 
 | `title` | VARCHAR(500) | No | — | Article title (auto-generated if omitted on create) |
 | `content` | TEXT | No | — | Markdown content |
 | `summary` | TEXT | Yes | — | LLM-generated 1-2 sentence summary |
-| `topics` | JSONB | No | `[]` | Array of strings, e.g. `["AI", "Python"]` |
-| `keywords` | JSONB | No | `[]` | Array of strings, e.g. `["neural network", "backpropagation"]` |
+| `topics` | JSONB | No | `[]` | Array of strings, e.g. `["AI", "Python"]` — LLM-extracted + manual |
+| `keywords` | JSONB | No | `[]` | Array of strings, e.g. `["neural network", "backpropagation"]` — LLM-extracted + manual |
 | `entities` | JSONB | No | `[]` | Array of objects, e.g. `[{"name": "PyTorch", "type": "Technology"}]` |
+| `manual_topics` | JSONB | No | `[]` | User-added topics (preserved across re-enrichment) |
+| `manual_keywords` | JSONB | No | `[]` | User-added keywords (preserved across re-enrichment) |
 | `enrichment_status` | VARCHAR(20) | No | `"pending"` | One of: `pending`, `processing`, `completed`, `failed` |
 | `created_at` | TIMESTAMPTZ | No | `now()` | Creation timestamp |
 | `updated_at` | TIMESTAMPTZ | No | `now()` | Last update timestamp (auto-updated) |
@@ -72,6 +74,78 @@ The `embedding` column uses Pgvector's `VECTOR` type. The dimension is configura
 | `created_at` | TIMESTAMPTZ | No | `now()` | When the call was made |
 
 Token counts are estimated at ~4 chars/token when the API (e.g., Ollama) doesn't provide usage data. Logs are kept indefinitely with no auto-cleanup.
+
+### `bookmarks` table
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | UUID | No | `gen_random_uuid()` | Primary key |
+| `article_id` | UUID | No | — | Foreign key to `articles.id` (CASCADE delete, unique) |
+| `created_at` | TIMESTAMPTZ | No | `now()` | When the bookmark was created |
+
+One bookmark per article (unique constraint on `article_id`).
+
+### `flashcards` table
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | VARCHAR(36) | No | UUID string | Primary key |
+| `article_id` | UUID | No | — | Foreign key to `articles.id` (CASCADE delete) |
+| `front` | TEXT | No | — | Question or concept name |
+| `back` | TEXT | No | — | Answer or explanation |
+| `hint` | TEXT | Yes | — | Optional clue |
+| `state` | VARCHAR(20) | No | `"new"` | One of: `new`, `learning`, `review`, `relearning` |
+| `due` | TIMESTAMPTZ | No | `now()` | When card is next due |
+| `interval` | INTEGER | No | `0` | Days between reviews |
+| `ease_factor` | FLOAT | No | `2.5` | SM-2 ease factor |
+| `step` | INTEGER | No | `0` | Current learning step index |
+| `repetitions` | INTEGER | No | `0` | Successful review count |
+| `lapses` | INTEGER | No | `0` | Times card was forgotten |
+| `last_review` | TIMESTAMPTZ | Yes | — | Last review timestamp |
+| `last_rating` | INTEGER | Yes | — | Last review rating (1-4) |
+| `created_at` | TIMESTAMPTZ | No | `now()` | Creation timestamp |
+| `updated_at` | TIMESTAMPTZ | No | `now()` | Last update timestamp |
+
+Flashcards are auto-generated on article enrichment when `flashcard_auto_generate=true`.
+
+### `quiz_attempts` table
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | VARCHAR(36) | No | UUID string | Primary key |
+| `quiz_type` | VARCHAR(20) | No | — | `mcq`, `short_answer`, or `flashcard` |
+| `topics` | JSONB | No | `[]` | Filter topics used |
+| `keywords` | JSONB | No | `[]` | Filter keywords used |
+| `article_count` | INTEGER | No | `0` | Number of source articles |
+| `num_questions` | INTEGER | No | — | Requested question count |
+| `questions` | JSONB | No | `[]` | Generated questions |
+| `answers` | JSONB | Yes | — | Submitted answers |
+| `score` | INTEGER | Yes | — | Quiz score |
+| `status` | VARCHAR(20) | No | `"generating"` | `generating`, `completed`, `failed` |
+| `error` | TEXT | Yes | — | Error message if failed |
+| `source_flashcard_ids` | JSONB | Yes | — | Flashcard IDs for weak-area quizzes |
+| `created_at` | TIMESTAMPTZ | No | `now()` | Creation timestamp |
+| `completed_at` | TIMESTAMPTZ | Yes | — | Completion timestamp |
+
+### `chat_sessions` table
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | UUID | No | `gen_random_uuid()` | Primary key |
+| `title` | VARCHAR(500) | No | `"New Chat"` | Session title (auto-set from first query) |
+| `created_at` | TIMESTAMPTZ | No | `now()` | Creation timestamp |
+| `updated_at` | TIMESTAMPTZ | No | `now()` | Last update timestamp |
+
+### `chat_messages` table
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | UUID | No | `gen_random_uuid()` | Primary key |
+| `session_id` | UUID | No | — | Foreign key to `chat_sessions.id` (CASCADE delete) |
+| `role` | VARCHAR(10) | No | — | `user` or `assistant` |
+| `content` | TEXT | No | — | Message text |
+| `sources` | JSONB | Yes | — | Source articles for assistant messages |
+| `created_at` | TIMESTAMPTZ | No | `now()` | Message timestamp |
 
 ### Entity types
 
@@ -155,7 +229,8 @@ make rebuild-graph  # Rebuild Neo4j from Postgres (re-runs enrichment pipeline)
 ```
 
 The backup includes:
-- `postgres_backup.sql` — full database dump (articles, embeddings, all data)
+- `postgres_backup.sql` — full database dump (articles, embeddings, flashcards, quizzes, chat history, all data)
 - `env_backup` — copy of `.env` configuration
+- `uploads/` — all uploaded images referenced in article content
 
 Backups are compressed and auto-cleaned (last 10 retained). See `scripts/backup.sh` and `scripts/restore.sh`.

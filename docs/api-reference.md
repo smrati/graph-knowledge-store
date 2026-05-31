@@ -165,13 +165,131 @@ Both `title` and `content` are optional. Only provided fields are updated.
 
 ### `DELETE /api/articles/{id}`
 
-Delete an article and all associated data (embeddings, graph nodes/relationships).
+Delete an article and all associated data (embeddings, graph nodes/relationships, bookmarks, flashcards).
 
 **Response:** 204 No Content
 
 **Errors:**
 - `400` — Invalid UUID format
 - `404` — Article not found
+
+---
+
+### `POST /api/articles/{id}/regenerate`
+
+Regenerate an article's title and re-trigger the full enrichment pipeline (topics, keywords, entities, summary, embeddings, graph sync) via LLM. Useful when you've edited content and want fresh metadata.
+
+**Response:** Updated `ArticleResponse` with `enrichment_status: "pending"`. Enrichment runs in the background.
+
+**Errors:**
+- `400` — Invalid UUID format
+- `404` — Article not found
+
+---
+
+### `PATCH /api/articles/{id}/tags`
+
+Add or remove manual topics and keywords on an article. Manual tags are preserved across re-enrichment.
+
+**Request Body:**
+```json
+{
+  "add_topics": ["machine learning"],
+  "remove_topics": [],
+  "add_keywords": ["neural network"],
+  "remove_keywords": ["old keyword"]
+}
+```
+
+All fields are optional. Only provided fields are applied.
+
+**Response:** Updated `ArticleResponse`.
+
+---
+
+## Image Upload
+
+### `POST /api/upload`
+
+Upload an image file. Used by the markdown editor's paste handler. Returns a URL that can be embedded in markdown.
+
+**Request:** `multipart/form-data` with a `file` field.
+
+**Constraints:**
+- Allowed types: JPEG, PNG, GIF, WebP, SVG
+- Max size: configurable via `UPLOAD_MAX_SIZE_MB` (default 10MB)
+
+**Response:**
+```json
+{
+  "url": "/uploads/abc123.png",
+  "filename": "abc123.png"
+}
+```
+
+Images are served statically at `/uploads/{filename}`.
+
+---
+
+## Bookmarks
+
+### `POST /api/bookmarks/{article_id}`
+
+Toggle bookmark on an article. Creates a bookmark if none exists, deletes it if already bookmarked.
+
+**Response:**
+```json
+{
+  "bookmarked": true
+}
+```
+
+---
+
+### `GET /api/bookmarks`
+
+List bookmarked articles, ordered by most recently bookmarked.
+
+**Query Parameters:**
+
+| Param | Type | Default | Description |
+|-------|------|---------|-------------|
+| `page` | integer | 1 | Page number |
+| `limit` | integer | 10 | Results per page (max 100) |
+
+**Response:**
+```json
+{
+  "articles": [
+    {
+      "id": "...",
+      "title": "...",
+      "summary": "...",
+      "topics": ["AI"],
+      "enrichment_status": "completed",
+      "created_at": "...",
+      "updated_at": "...",
+      "bookmarked_at": "..."
+    }
+  ],
+  "total": 5,
+  "page": 1,
+  "limit": 10
+}
+```
+
+---
+
+### `GET /api/bookmarks/ids`
+
+Get the set of all bookmarked article IDs. Used by the frontend for efficient bookmark state lookup.
+
+**Response:**
+```json
+{
+  "ids": ["uuid1", "uuid2"]
+}
+```
 
 ---
 
@@ -329,7 +447,7 @@ Get counts of nodes in the graph.
 
 ### `POST /api/quiz/generate`
 
-Generate a quiz from articles matching selected topics and/or keywords. Uses OR logic — articles matching any filter qualify.
+Generate a quiz from articles matching selected topics and/or keywords. Uses OR logic — articles matching any filter qualify. Generation runs asynchronously.
 
 **Request Body:**
 ```json
@@ -347,35 +465,223 @@ Generate a quiz from articles matching selected topics and/or keywords. Uses OR 
 - `quiz_type` — one of: `"mcq"`, `"short_answer"`, `"flashcard"`
 - `num_questions` — number of questions (1-15)
 
-**Context efficiency:** Sends summaries + metadata from all matching articles, plus full content from a sampled subset (max 6). Total prompt capped at 8000 chars.
+**Response:**
+```json
+{
+  "quiz_id": "...",
+  "status": "generating"
+}
+```
+
+Poll `GET /api/quiz/status/{quiz_id}` for completion.
+
+---
+
+### `POST /api/quiz/generate/article/{article_id}`
+
+Generate a quiz from a single article's content.
+
+**Request Body:**
+```json
+{
+  "quiz_type": "mcq",
+  "num_questions": 10
+}
+```
+
+---
+
+### `POST /api/quiz/generate/weak`
+
+Generate a quiz targeting weak areas based on flashcard review history (lapsed cards, low ratings).
+
+**Request Body:**
+```json
+{
+  "quiz_type": "mcq",
+  "num_questions": 5
+}
+```
+
+---
+
+### `GET /api/quiz/status/{quiz_id}`
+
+Poll quiz generation status.
 
 **Response:**
 ```json
 {
+  "quiz_id": "...",
+  "status": "completed",
+  "progress": 10,
+  "total": 10,
   "quiz_type": "mcq",
-  "topics": ["machine learning"],
-  "keywords": ["backpropagation"],
-  "article_count": 8,
-  "questions": [
-    {
-      "question": "What is the primary purpose of backpropagation?",
-      "options": [
-        {"label": "A", "text": "Data preprocessing"},
-        {"label": "B", "text": "Computing gradients for weight updates"},
-        {"label": "C", "text": "Feature extraction"},
-        {"label": "D", "text": "Regularization"}
-      ],
-      "correct_index": 1,
-      "explanation": "Backpropagation computes the gradient of the loss function with respect to each weight by the chain rule."
-    }
+  "topics": [...],
+  "keywords": [...],
+  "article_count": 5,
+  "questions": [...],
+  "error": null
+}
+```
+
+---
+
+### `GET /api/quiz/{quiz_id}`
+
+Get a completed quiz with questions and answers.
+
+---
+
+### `POST /api/quiz/{quiz_id}/submit`
+
+Submit quiz answers.
+
+**Request Body:**
+```json
+{
+  "answers": [...],
+  "score": 8,
+  "total": 10
+}
+```
+
+---
+
+### `GET /api/quiz/history/list`
+
+List past quiz attempts.
+
+---
+
+### `GET /api/quiz/active/now`
+
+Get the current active (in-progress) quiz, if any.
+
+---
+
+## Study / Flashcards
+
+### `GET /api/study/stats`
+
+Get spaced repetition statistics: total cards, new/learning/review counts, reviews today, retention rate, streak.
+
+---
+
+### `GET /api/study/due`
+
+Get flashcards that are due for review now.
+
+---
+
+### `GET /api/study/new`
+
+Get new (unstudied) flashcards, respecting the daily new card limit.
+
+---
+
+### `POST /api/study/review/{card_id}`
+
+Submit a flashcard review rating. Updates card scheduling via SM-2 algorithm.
+
+**Request Body:**
+```json
+{
+  "rating": 3
+}
+```
+
+Rating: 1=Again, 2=Hard, 3=Good, 4=Easy.
+
+---
+
+### `GET /api/study/decks`
+
+List all flashcard decks (one per article) with counts for new/learning/review/due.
+
+---
+
+### `GET /api/study/deck/{article_id}`
+
+Get all flashcards for a specific article.
+
+---
+
+### `POST /api/study/generate/{article_id}`
+
+Regenerate flashcards for an article (deletes existing and creates new ones).
+
+---
+
+### `POST /api/study/generate-more/{article_id}`
+
+Generate additional flashcards for an article without deleting existing ones.
+
+**Query Parameters:** `n=5` (number of additional cards)
+
+---
+
+### `POST /api/study/generate-all-missing`
+
+Generate flashcards for all articles that don't have any yet.
+
+---
+
+## RAG Chat
+
+### `POST /api/rag/ask`
+
+Ask a question about your knowledge base. Retrieves relevant articles via semantic search and generates an answer using LLM.
+
+**Request Body:**
+```json
+{
+  "query": "What is backpropagation?",
+  "session_id": "optional-session-uuid"
+}
+```
+
+**Response:**
+```json
+{
+  "answer": "Backpropagation is...",
+  "sources": [
+    {"id": "...", "title": "Neural Networks 101", "score": 0.87}
   ]
 }
 ```
 
-**Errors:**
-- `400` — No topics or keywords provided, or invalid `quiz_type`
-- `404` — No articles found matching the filters
-- `500` — LLM failed to generate valid quiz questions
+---
+
+### `POST /api/rag/ask/stream`
+
+Same as `/ask` but returns a streaming response (Server-Sent Events).
+
+**Response format:** `text/event-stream` with `data: {...}` lines for chunks, sources, and `[DONE]`.
+
+---
+
+### `POST /api/rag/sessions`
+
+Create a new chat session.
+
+---
+
+### `GET /api/rag/sessions`
+
+List chat sessions, ordered by most recently updated.
+
+---
+
+### `GET /api/rag/sessions/{session_id}/messages`
+
+Get all messages in a chat session.
+
+---
+
+### `DELETE /api/rag/sessions/{session_id}`
+
+Delete a chat session and all its messages.
 
 ---
 
